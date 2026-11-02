@@ -116,18 +116,33 @@ class PhysicsEngine:
         elasticity: float = 0.6,
         friction: float = 0.7,
         static: bool = False,
-        color: Tuple[int, int, int] = (46, 204, 113)
+        color: Tuple[int, int, int] = (46, 204, 113),
+        on_ramp: Optional[str] = None
     ) -> bool:
-        """Creates a rectangular rigid body."""
+        """Creates a rectangular rigid body. If on_ramp is specified, snaps to the top of that ramp."""
         try:
+            # If on_ramp is provided, automatically snap to the top of the ramp
+            body_angle = 0.0
+            if on_ramp and on_ramp in self.named_shapes:
+                ramp = self.named_shapes[on_ramp]
+                if isinstance(ramp, pymunk.Segment):
+                    dx = ramp.b.x - ramp.a.x
+                    dy = ramp.b.y - ramp.a.y
+                    body_angle = math.atan2(dy, dx)
+                    # Position box slightly down the ramp and resting on top surface
+                    x = ramp.a.x + math.cos(body_angle) * (width * 0.8)
+                    y = ramp.a.y + math.sin(body_angle) * (width * 0.8) - (height / 2.0 + ramp.radius + 2.0)
+
             if static or mass <= 0:
                 body = pymunk.Body(body_type=pymunk.Body.STATIC)
                 body.position = (x, y)
+                body.angle = body_angle
                 shape = pymunk.Poly.create_box(body, (width, height))
             else:
                 moment = pymunk.moment_for_box(mass, (width, height))
                 body = pymunk.Body(mass, moment)
                 body.position = (x, y)
+                body.angle = body_angle
                 shape = pymunk.Poly.create_box(body, (width, height))
             
             shape.elasticity = max(0.0, min(1.0, elasticity))
@@ -157,10 +172,20 @@ class PhysicsEngine:
         elasticity: float = 0.8,
         friction: float = 0.5,
         static: bool = False,
-        color: Tuple[int, int, int] = (52, 152, 219)
+        color: Tuple[int, int, int] = (52, 152, 219),
+        on_ramp: Optional[str] = None
     ) -> bool:
-        """Creates a circular rigid body."""
+        """Creates a circular rigid body. If on_ramp is specified, snaps to the top of that ramp."""
         try:
+            if on_ramp and on_ramp in self.named_shapes:
+                ramp = self.named_shapes[on_ramp]
+                if isinstance(ramp, pymunk.Segment):
+                    dx = ramp.b.x - ramp.a.x
+                    dy = ramp.b.y - ramp.a.y
+                    angle = math.atan2(dy, dx)
+                    x = ramp.a.x + math.cos(angle) * (radius * 1.5)
+                    y = ramp.a.y + math.sin(angle) * (radius * 1.5) - (radius + ramp.radius + 2.0)
+
             if static or mass <= 0:
                 body = pymunk.Body(body_type=pymunk.Body.STATIC)
                 body.position = (x, y)

@@ -28,6 +28,10 @@ SIMULATION_TOOLS = [
                     "elasticity": {"type": "number", "description": "Bounciness from 0.0 to 1.0."},
                     "friction": {"type": "number", "description": "Surface friction coefficient (e.g. 0.1 to 0.9)."},
                     "static": {"type": "boolean", "description": "If true, object is fixed in place."},
+                    "on_ramp": {
+                        "type": "string",
+                        "description": "Name of an inclined ramp (e.g. 'ramp_1') to automatically place this box on top of, oriented at the ramp angle."
+                    },
                     "color_rgb": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -54,6 +58,10 @@ SIMULATION_TOOLS = [
                     "elasticity": {"type": "number", "description": "Bounciness from 0.0 to 1.0."},
                     "friction": {"type": "number", "description": "Friction coefficient."},
                     "static": {"type": "boolean", "description": "If true, circle is immovable."},
+                    "on_ramp": {
+                        "type": "string",
+                        "description": "Name of an inclined ramp (e.g. 'ramp_1') to place this circle on top of."
+                    },
                     "color_rgb": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -187,16 +195,17 @@ Your canvas is 760 pixels wide and 480 pixels high:
 - Floor is at y = 460.
 - Standard gravity is (0, 900).
 
-CORE RESPONSIBILITIES:
-1. When asked to construct, simulate, or modify a physical system, use the provided tools (create_box, create_circle, create_ramp, create_joint, apply_force, set_world_gravity, clear_world).
-2. ALWAYS call `set_experiment_metrics` to define 2 to 5 scientific variables specifically related to what you are simulating.
-   Example: For a block sliding down an inclined plane:
+CORE RULES:
+1. When asked to construct a physical system, call the appropriate tools (create_box, create_circle, create_ramp, create_joint, apply_force, set_world_gravity, clear_world).
+2. SPATIAL PLACEMENT:
+   - When placing a box or sphere on an inclined ramp, always pass `on_ramp="<ramp_name>"`! The physics engine will automatically calculate the slope, tilt the body, and rest it at the top of the ramp.
+3. ALWAYS call `set_experiment_metrics` to configure 2 to 5 scientific variables specifically relevant to what you are simulating.
+   Example: For an inclined plane with a sliding block:
    - Incline Angle (θ) in ° [constant]
    - Friction Coeff (μ) [constant or friction of ramp]
    - Block Velocity (v) in m/s [velocity of block]
    - Block Acceleration (a) in m/s² [accel of block]
    - Normal Force (Fn) in N [normal_force]
-3. When the user asks you to modify or refine the system (e.g. "remove the sphere", "make it steeper", "increase friction"), adjust the objects accordingly without recreating unwanted objects.
 4. Provide concise scientific explanations explaining the observed equations and physical behavior.
 """
 
@@ -251,9 +260,10 @@ class AIAgent:
                 e = float(args.get("elasticity", 0.6))
                 f = float(args.get("friction", 0.7))
                 s = bool(args.get("static", False))
+                on_ramp = args.get("on_ramp")
                 color = tuple(args.get("color_rgb", [46, 204, 113]))
-                self.engine.add_box(name, x, y, w, h, m, e, f, s, color)
-                return f"Created box '{name}' at ({x}, {y})"
+                self.engine.add_box(name, x, y, w, h, m, e, f, s, color, on_ramp=on_ramp)
+                return f"Created box '{name}' at ({x}, {y})" + (f" on {on_ramp}" if on_ramp else "")
 
             elif function_name == "create_circle":
                 name = args.get("name", f"circle_{len(self.engine.named_bodies)}")
@@ -264,9 +274,10 @@ class AIAgent:
                 e = float(args.get("elasticity", 0.8))
                 f = float(args.get("friction", 0.5))
                 s = bool(args.get("static", False))
+                on_ramp = args.get("on_ramp")
                 color = tuple(args.get("color_rgb", [52, 152, 219]))
-                self.engine.add_circle(name, x, y, r, m, e, f, s, color)
-                return f"Created circle '{name}' at ({x}, {y})"
+                self.engine.add_circle(name, x, y, r, m, e, f, s, color, on_ramp=on_ramp)
+                return f"Created circle '{name}' at ({x}, {y})" + (f" on {on_ramp}" if on_ramp else "")
 
             elif function_name == "create_ramp":
                 name = args.get("name", f"ramp_{len(self.engine.named_shapes)}")
@@ -364,11 +375,26 @@ class AIAgent:
                     messages=self.conversation_history,
                     temperature=0.4
                 )
-                explanation = second_response.choices[0].message.content or "Simulation updated."
+                explanation = second_response.choices[0].message.content or ""
+                if not explanation.strip():
+                    reasoning = getattr(second_response.choices[0].message, "reasoning", "")
+                    if reasoning:
+                        paragraphs = [p.strip() for p in reasoning.strip().split("\n\n") if p.strip()]
+                        explanation = paragraphs[-1] if paragraphs else "Simulation updated."
+                    else:
+                        explanation = "Simulation configured and running."
+                
                 self.conversation_history.append({"role": "assistant", "content": explanation})
                 return explanation, actions_taken
             else:
-                explanation = msg.content or "Acknowledged."
+                explanation = msg.content or ""
+                if not explanation.strip():
+                    reasoning = getattr(msg, "reasoning", "")
+                    if reasoning:
+                        paragraphs = [p.strip() for p in reasoning.strip().split("\n\n") if p.strip()]
+                        explanation = paragraphs[-1] if paragraphs else "Acknowledged."
+                    else:
+                        explanation = "Acknowledged."
                 self.conversation_history.append({"role": "assistant", "content": explanation})
                 return explanation, actions_taken
 
