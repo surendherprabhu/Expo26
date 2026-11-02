@@ -1,7 +1,7 @@
 """
 AI Agent Module for Universal AI Simulation Environment.
-Connects directly to OpenAI API using structured tool calling to manipulate Pymunk simulation.
-No offline fallback: all NLP is executed directly through the model.
+Connects directly to LLM with structured tools for scientific experimentation.
+Enforces concise engineering reporting (no chatbot essays) and pauses apparatus at t=0.0s.
 """
 
 import json
@@ -9,28 +9,46 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 from openai import OpenAI, RateLimitError, AuthenticationError, APIConnectionError
 
-# Tool schemas for OpenAI function calling
 SIMULATION_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "create_box",
-            "description": "Creates a rectangular rigid body (e.g. block, crate, beam, platform).",
+            "name": "create_wedge",
+            "description": "Creates a solid triangular incline wedge apparatus resting flat on the ground floor.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "Unique identifier for the object."},
-                    "x": {"type": "number", "description": "X coordinate in canvas (0 to 750)."},
-                    "y": {"type": "number", "description": "Y coordinate in canvas (0 to 450, floor is at y=460)."},
+                    "name": {"type": "string", "description": "Unique identifier (e.g. 'wedge_30')."},
+                    "x_left": {"type": "number", "description": "Left base coordinate (e.g. 80)."},
+                    "x_right": {"type": "number", "description": "Right base coordinate (e.g. 520)."},
+                    "height": {"type": "number", "description": "Height in pixels. For 30°: (x_right - x_left) * 0.577. For 45°: (x_right - x_left)."},
+                    "friction": {"type": "number", "description": "Surface friction coefficient (0.0 to 1.0)."},
+                    "elasticity": {"type": "number", "description": "Bounciness (0.0 to 1.0)."}
+                },
+                "required": ["name", "x_left", "x_right", "height"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_box",
+            "description": "Creates a rectangular rigid body (e.g. wooden block, slider).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Unique identifier."},
+                    "x": {"type": "number", "description": "X coordinate."},
+                    "y": {"type": "number", "description": "Y coordinate."},
                     "width": {"type": "number", "description": "Width in pixels."},
                     "height": {"type": "number", "description": "Height in pixels."},
-                    "mass": {"type": "number", "description": "Mass in kg. Defaults to 5.0."},
-                    "elasticity": {"type": "number", "description": "Bounciness from 0.0 to 1.0."},
-                    "friction": {"type": "number", "description": "Surface friction coefficient (e.g. 0.1 to 0.9)."},
-                    "static": {"type": "boolean", "description": "If true, object is fixed in place."},
-                    "on_ramp": {
+                    "mass": {"type": "number", "description": "Mass in kg."},
+                    "elasticity": {"type": "number", "description": "Elasticity (0.0 to 1.0)."},
+                    "friction": {"type": "number", "description": "Friction coefficient (0.0 to 1.0)."},
+                    "static": {"type": "boolean", "description": "If true, object is fixed."},
+                    "on_wedge": {
                         "type": "string",
-                        "description": "Name of an inclined ramp (e.g. 'ramp_1') to automatically place this box on top of, oriented at the ramp angle."
+                        "description": "Name of an inclined wedge to automatically place this box on top of, oriented at the slope angle."
                     },
                     "color_rgb": {
                         "type": "array",
@@ -38,7 +56,7 @@ SIMULATION_TOOLS = [
                         "description": "[R, G, B] color (0-255)."
                     }
                 },
-                "required": ["name", "x", "y", "width", "height"]
+                "required": ["name", "width", "height"]
             }
         }
     },
@@ -46,21 +64,21 @@ SIMULATION_TOOLS = [
         "type": "function",
         "function": {
             "name": "create_circle",
-            "description": "Creates a circular rigid body (e.g. ball, wheel, cylinder).",
+            "description": "Creates a circular rigid body (e.g. sphere, pendulum bob, wheel).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "Unique identifier for the circle."},
-                    "x": {"type": "number", "description": "Center X coordinate."},
-                    "y": {"type": "number", "description": "Center Y coordinate."},
+                    "name": {"type": "string", "description": "Unique identifier."},
+                    "x": {"type": "number", "description": "Center X."},
+                    "y": {"type": "number", "description": "Center Y."},
                     "radius": {"type": "number", "description": "Radius in pixels."},
                     "mass": {"type": "number", "description": "Mass in kg."},
-                    "elasticity": {"type": "number", "description": "Bounciness from 0.0 to 1.0."},
+                    "elasticity": {"type": "number", "description": "Elasticity (0.0 to 1.0)."},
                     "friction": {"type": "number", "description": "Friction coefficient."},
                     "static": {"type": "boolean", "description": "If true, circle is immovable."},
-                    "on_ramp": {
+                    "on_wedge": {
                         "type": "string",
-                        "description": "Name of an inclined ramp (e.g. 'ramp_1') to place this circle on top of."
+                        "description": "Name of an inclined wedge to place this circle on top of."
                     },
                     "color_rgb": {
                         "type": "array",
@@ -68,28 +86,7 @@ SIMULATION_TOOLS = [
                         "description": "[R, G, B] color."
                     }
                 },
-                "required": ["name", "x", "y", "radius"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_ramp",
-            "description": "Creates an inclined static ramp or plane segment.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Unique identifier for the ramp."},
-                    "x1": {"type": "number", "description": "Start X coordinate."},
-                    "y1": {"type": "number", "description": "Start Y coordinate."},
-                    "x2": {"type": "number", "description": "End X coordinate."},
-                    "y2": {"type": "number", "description": "End Y coordinate."},
-                    "thickness": {"type": "number", "description": "Thickness in pixels."},
-                    "elasticity": {"type": "number", "description": "Bounciness (0.0 to 1.0)."},
-                    "friction": {"type": "number", "description": "Friction coefficient (0.0 to 1.0)."}
-                },
-                "required": ["name", "x1", "y1", "x2", "y2"]
+                "required": ["name", "radius"]
             }
         }
     },
@@ -97,16 +94,14 @@ SIMULATION_TOOLS = [
         "type": "function",
         "function": {
             "name": "create_joint",
-            "description": "Connects two objects with a pin joint (pivot) or damped spring.",
+            "description": "Connects two objects with a pin/pivot joint.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "joint_type": {"type": "string", "enum": ["pin", "spring"]},
-                    "name": {"type": "string", "description": "Unique joint identifier."},
+                    "joint_type": {"type": "string", "enum": ["pin"]},
+                    "name": {"type": "string", "description": "Unique joint name."},
                     "body_a": {"type": "string", "description": "Name of first body or 'world'."},
-                    "body_b": {"type": "string", "description": "Name of second body."},
-                    "stiffness": {"type": "number", "description": "Spring stiffness."},
-                    "rest_length": {"type": "number", "description": "Spring rest length."}
+                    "body_b": {"type": "string", "description": "Name of second body."}
                 },
                 "required": ["joint_type", "name", "body_a", "body_b"]
             }
@@ -131,42 +126,22 @@ SIMULATION_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "set_world_gravity",
-            "description": "Modifies world gravity vector (e.g. Earth [0, 900], Moon [0, 160], Zero-G [0, 0]).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "gx": {"type": "number", "description": "Horizontal gravity."},
-                    "gy": {"type": "number", "description": "Vertical gravity."}
-                },
-                "required": ["gx", "gy"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "set_experiment_metrics",
-            "description": "CRITICAL: Configures the real-time telemetry panel with 2 to 5 scientific variables specifically relevant to this experiment.",
+            "description": "Configures the real-time telemetry panel with 2 to 5 scientific variables.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "metrics": {
                         "type": "array",
-                        "description": "List of 2 to 5 scientific measurements to display live on screen.",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "id": {"type": "string", "description": "Short identifier (e.g. 'theta', 'mu', 'v_block', 'a_block')."},
-                                "name": {"type": "string", "description": "Display title (e.g. 'Incline Angle (θ)', 'Friction Coeff (μ)', 'Velocity (v)', 'Acceleration (a)', 'Normal Force (Fn)')."},
-                                "unit": {"type": "string", "description": "Scientific unit (e.g. '°', 'm/s', 'm/s²', 'N', 'kg', 'J')."},
-                                "type": {
-                                    "type": "string",
-                                    "enum": ["constant", "velocity", "accel", "angle", "friction", "mass", "kinetic_energy", "potential_energy", "normal_force"],
-                                    "description": "How the telemetry value is computed."
-                                },
-                                "target_body": {"type": "string", "description": "Name of the target body if measuring velocity, accel, mass, etc."},
-                                "value": {"type": "number", "description": "Fixed numeric value if type is constant or angle (e.g. 30.0 for 30 degrees)."}
+                                "id": {"type": "string"},
+                                "name": {"type": "string"},
+                                "unit": {"type": "string"},
+                                "type": {"type": "string", "enum": ["constant", "velocity", "accel", "normal_force"]},
+                                "target_body": {"type": "string"},
+                                "value": {"type": "number"}
                             },
                             "required": ["id", "name", "unit", "type"]
                         }
@@ -189,24 +164,19 @@ SIMULATION_TOOLS = [
     }
 ]
 
-SYSTEM_PROMPT = """You are the AI Physics Controller for an interactive 2D simulation environment (Expo26 / SDG 9 Innovation Lab).
-Your canvas is 760 pixels wide and 480 pixels high:
-- (0, 0) is top-left.
-- Floor is at y = 460.
-- Standard gravity is (0, 900).
+SYSTEM_PROMPT = """You are the AI Scientific Experimentation Controller for an interactive physics simulation lab (SDG 9).
+Canvas: 760 px wide, 480 px high. Ground floor is at y = 460.
 
-CORE RULES:
-1. When asked to construct a physical system, call the appropriate tools (create_box, create_circle, create_ramp, create_joint, apply_force, set_world_gravity, clear_world).
-2. SPATIAL PLACEMENT:
-   - When placing a box or sphere on an inclined ramp, always pass `on_ramp="<ramp_name>"`! The physics engine will automatically calculate the slope, tilt the body, and rest it at the top of the ramp.
-3. ALWAYS call `set_experiment_metrics` to configure 2 to 5 scientific variables specifically relevant to what you are simulating.
-   Example: For an inclined plane with a sliding block:
-   - Incline Angle (θ) in ° [constant]
-   - Friction Coeff (μ) [constant or friction of ramp]
-   - Block Velocity (v) in m/s [velocity of block]
-   - Block Acceleration (a) in m/s² [accel of block]
-   - Normal Force (Fn) in N [normal_force]
-4. Provide concise scientific explanations explaining the observed equations and physical behavior.
+CRITICAL INSTRUCTIONS:
+1. When asked to simulate an inclined plane, use `create_wedge` (solid triangle resting on floor), and place the sliding block using `on_wedge="<wedge_name>"`.
+2. Always call `set_experiment_metrics` to track 2-5 relevant physical quantities.
+3. CONVERSATIONAL STYLE:
+   - DO NOT write multi-paragraph textbook essays.
+   - DO NOT output ASCII art or long equation derivations.
+   - Format response strictly as a concise 3-line Experiment Protocol:
+     • Setup: [Summary of mass, geometry, and friction]
+     • Theoretical Benchmark: [Formula and expected theoretical value, e.g. a_theor = 1.93 m/s²]
+     • Status: Apparatus frozen at t=0.0s. Click Release to run experiment.
 """
 
 class AIAgent:
@@ -250,59 +220,51 @@ class AIAgent:
     def execute_tool_call(self, function_name: str, args: Dict[str, Any]) -> str:
         """Executes a parsed tool call against the Pymunk physics engine."""
         try:
-            if function_name == "create_box":
+            if function_name == "create_wedge":
+                name = args.get("name", "incline_wedge")
+                x_left = float(args.get("x_left", 80))
+                x_right = float(args.get("x_right", 500))
+                height = float(args.get("height", 220))
+                f = float(args.get("friction", 0.5))
+                e = float(args.get("elasticity", 0.2))
+                self.engine.add_wedge(name, x_left, x_right, height, f, e)
+                return f"Constructed solid wedge '{name}' (base {x_left} to {x_right}, height {height}px, μ={f})"
+
+            elif function_name == "create_box":
                 name = args.get("name", f"box_{len(self.engine.named_bodies)}")
-                x = float(args["x"])
-                y = float(args["y"])
+                x = float(args.get("x", 200))
+                y = float(args.get("y", 200))
                 w = float(args["width"])
                 h = float(args["height"])
                 m = float(args.get("mass", 5.0))
-                e = float(args.get("elasticity", 0.6))
-                f = float(args.get("friction", 0.7))
+                e = float(args.get("elasticity", 0.2))
+                f = float(args.get("friction", 0.5))
                 s = bool(args.get("static", False))
-                on_ramp = args.get("on_ramp")
+                on_wedge = args.get("on_wedge")
                 color = tuple(args.get("color_rgb", [46, 204, 113]))
-                self.engine.add_box(name, x, y, w, h, m, e, f, s, color, on_ramp=on_ramp)
-                return f"Created box '{name}' at ({x}, {y})" + (f" on {on_ramp}" if on_ramp else "")
+                self.engine.add_box(name, x, y, w, h, m, e, f, s, color, on_wedge=on_wedge)
+                return f"Placed box '{name}' (mass {m}kg, μ={f})" + (f" on {on_wedge}" if on_wedge else "")
 
             elif function_name == "create_circle":
                 name = args.get("name", f"circle_{len(self.engine.named_bodies)}")
-                x = float(args["x"])
-                y = float(args["y"])
+                x = float(args.get("x", 200))
+                y = float(args.get("y", 200))
                 r = float(args["radius"])
                 m = float(args.get("mass", 3.0))
                 e = float(args.get("elasticity", 0.8))
-                f = float(args.get("friction", 0.5))
+                f = float(args.get("friction", 0.2))
                 s = bool(args.get("static", False))
-                on_ramp = args.get("on_ramp")
+                on_wedge = args.get("on_wedge")
                 color = tuple(args.get("color_rgb", [52, 152, 219]))
-                self.engine.add_circle(name, x, y, r, m, e, f, s, color, on_ramp=on_ramp)
-                return f"Created circle '{name}' at ({x}, {y})" + (f" on {on_ramp}" if on_ramp else "")
-
-            elif function_name == "create_ramp":
-                name = args.get("name", f"ramp_{len(self.engine.named_shapes)}")
-                x1 = float(args["x1"])
-                y1 = float(args["y1"])
-                x2 = float(args["x2"])
-                y2 = float(args["y2"])
-                t = float(args.get("thickness", 6.0))
-                e = float(args.get("elasticity", 0.5))
-                f = float(args.get("friction", 0.6))
-                self.engine.add_segment(name, x1, y1, x2, y2, t, e, f)
-                return f"Created ramp '{name}' from ({x1},{y1}) to ({x2},{y2})"
+                self.engine.add_circle(name, x, y, r, m, e, f, s, color, on_wedge=on_wedge)
+                return f"Placed sphere '{name}' (mass {m}kg)" + (f" on {on_wedge}" if on_wedge else "")
 
             elif function_name == "create_joint":
                 name = args.get("name", f"joint_{len(self.engine.named_joints)}")
-                jtype = args.get("joint_type", "pin")
                 ba = args["body_a"]
                 bb = args["body_b"]
-                if jtype == "spring":
-                    length = float(args.get("rest_length", 80.0))
-                    k = float(args.get("stiffness", 100.0))
-                    self.engine.add_spring_joint(name, ba, bb, length, k)
-                else:
-                    self.engine.add_pin_joint(name, ba, bb)
-                return f"Created {jtype} joint '{name}' between {ba} and {bb}"
+                self.engine.add_pin_joint(name, ba, bb)
+                return f"Connected pin joint '{name}' between {ba} and {bb}"
 
             elif function_name == "apply_force":
                 bname = args["body_name"]
@@ -311,31 +273,25 @@ class AIAgent:
                 self.engine.apply_impulse(bname, (fx, fy))
                 return f"Applied impulse ({fx}, {fy}) to '{bname}'"
 
-            elif function_name == "set_world_gravity":
-                gx = float(args["gx"])
-                gy = float(args["gy"])
-                self.engine.set_gravity(gx, gy)
-                return f"Set gravity to ({gx}, {gy})"
-
             elif function_name == "set_experiment_metrics":
                 metrics = args.get("metrics", [])
                 self.engine.set_monitored_metrics(metrics)
-                return f"Configured {len(metrics)} dynamic telemetry variables."
+                return f"Configured {len(metrics)} telemetry variables."
 
             elif function_name == "clear_world":
                 self.engine.reset()
-                return "Cleared simulation world."
+                return "Cleared world."
 
             return f"Unknown tool: {function_name}"
         except Exception as e:
             return f"Error executing {function_name}: {e}"
 
     def process_message(self, user_text: str) -> Tuple[str, List[str]]:
-        """Processes user instructions directly through the LLM."""
+        """Processes user instructions, sets up the experiment, and pauses at t=0."""
         if not self.is_online:
             return (
-                "⚠️ API Key Not Configured.\n\n"
-                "Please click '⚙ Settings' at the bottom-left to enter your OpenAI API key.",
+                "⚠️ API Not Configured.\n\n"
+                "Please click '⚙ Settings' at the bottom-left to set your OpenAI key or local Ollama URL.",
                 []
             )
 
@@ -352,7 +308,6 @@ class AIAgent:
             )
             msg = response.choices[0].message
             
-            # Handle tool calls
             if msg.tool_calls:
                 self.conversation_history.append(msg)
                 
@@ -369,20 +324,24 @@ class AIAgent:
                         "content": result_msg
                     })
                 
-                # Second turn for natural language explanation
+                # Freeze apparatus at t=0 and save initial snapshot
+                self.engine.capture_initial_snapshot()
+                
+                # Request crisp engineering protocol
                 second_response = self.client.chat.completions.create(
                     model=self.model,
                     messages=self.conversation_history,
-                    temperature=0.4
+                    temperature=0.3
                 )
+                
                 explanation = second_response.choices[0].message.content or ""
                 if not explanation.strip():
                     reasoning = getattr(second_response.choices[0].message, "reasoning", "")
                     if reasoning:
                         paragraphs = [p.strip() for p in reasoning.strip().split("\n\n") if p.strip()]
-                        explanation = paragraphs[-1] if paragraphs else "Simulation updated."
+                        explanation = paragraphs[-1] if paragraphs else "Apparatus configured."
                     else:
-                        explanation = "Simulation configured and running."
+                        explanation = "Apparatus ready and frozen at t=0.0s."
                 
                 self.conversation_history.append({"role": "assistant", "content": explanation})
                 return explanation, actions_taken
@@ -398,16 +357,11 @@ class AIAgent:
                 self.conversation_history.append({"role": "assistant", "content": explanation})
                 return explanation, actions_taken
 
-        except RateLimitError as e:
-            err_msg = (
-                "⚠️ OpenAI Rate Limit / Quota Exceeded (429):\n\n"
-                "Your account has no remaining credits or exceeded its current quota.\n"
-                "Please check your billing and credits at: https://platform.openai.com/settings/organization/billing/"
-            )
-            return err_msg, []
+        except RateLimitError:
+            return "⚠️ OpenAI Quota Exceeded (429): Please check billing credits at platform.openai.com.", []
         except AuthenticationError as e:
-            return f"⚠️ OpenAI Authentication Error (401):\n\nInvalid API Key. Please update your key in Settings.\nDetails: {e}", []
+            return f"⚠️ OpenAI Auth Error (401): {e}", []
         except APIConnectionError as e:
-            return f"⚠️ Network Connection Error:\n\nCould not reach OpenAI servers. Please check your internet connection.\nDetails: {e}", []
+            return f"⚠️ Connection Error: {e}", []
         except Exception as e:
-            return f"⚠️ OpenAI API Error:\n\n{type(e).__name__}: {e}", []
+            return f"⚠️ Error: {type(e).__name__} - {e}", []

@@ -1,11 +1,14 @@
 """
 Settings Dialog for Universal AI Simulation Environment.
-Lets user set API Key, select model, and optionally configure custom endpoint (OpenAI vs local Ollama).
+Includes two subdivisions:
+1. API & Model Configuration (OpenAI, Ollama, custom base URLs).
+2. Preset Lab Experiments: Verified scientific experiments with defined aims, apparatus, and conclusions.
 """
 
 import json
 import os
 import customtkinter as ctk
+from core.presets import PRESET_EXPERIMENTS
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json")
 
@@ -30,37 +33,54 @@ def save_config(config: dict):
         print(f"Error saving config: {e}")
 
 class SettingsDialog:
-    def __init__(self, parent, on_save_callback):
+    def __init__(self, parent, on_save_callback, on_load_preset_callback):
         self.parent = parent
         self.on_save_callback = on_save_callback
+        self.on_load_preset_callback = on_load_preset_callback
         self.config = load_config()
 
     def show(self):
         self.window = ctk.CTkToplevel(self.parent)
-        self.window.title("Settings — AI Simulation Engine")
-        self.window.geometry("480x400")
+        self.window.title("Settings & Experiment Lab — Universal Simulation")
+        self.window.geometry("560x520")
         self.window.resizable(False, False)
-        self.window.grab_set()  # Modal
+        self.window.grab_set()
         self.window.configure(fg_color="#0e1117")
 
-        # Title
-        ctk.CTkLabel(
+        # Tab view for subdivisions
+        self.tabview = ctk.CTkTabview(
             self.window,
-            text="AI Model & API Configuration",
-            font=("SF Pro", 16, "bold"),
-            text_color="#ffffff"
-        ).pack(pady=(16, 12))
+            segmented_button_selected_color="#2fa572",
+            segmented_button_selected_hover_color="#106a43",
+            segmented_button_unselected_color="#1c212d"
+        )
+        self.tabview.pack(fill="both", expand=True, padx=16, pady=12)
 
-        # API Key field
-        api_frame = ctk.CTkFrame(self.window, fg_color="transparent")
-        api_frame.pack(fill="x", padx=30, pady=4)
-        
-        ctk.CTkLabel(api_frame, text="API Key (OpenAI or 'ollama'):", font=("SF Pro", 12)).pack(anchor="w")
+        # Tab 1: AI Model & API Configuration
+        self.tab_api = self.tabview.add("AI Model & API")
+        self._build_api_tab()
+
+        # Tab 2: Preset Experiments Lab
+        self.tab_presets = self.tabview.add("🔬 Preset Experiments")
+        self._build_presets_tab()
+
+    def _build_api_tab(self):
+        ctk.CTkLabel(
+            self.tab_api,
+            text="AI Model & API Configuration",
+            font=("SF Pro", 15, "bold"),
+            text_color="#ffffff"
+        ).pack(pady=(10, 12))
+
+        # API Key
+        api_frame = ctk.CTkFrame(self.tab_api, fg_color="transparent")
+        api_frame.pack(fill="x", padx=20, pady=4)
+        ctk.CTkLabel(api_frame, text="API Key (OpenAI key or 'ollama'):", font=("SF Pro", 12)).pack(anchor="w")
         self.api_key_entry = ctk.CTkEntry(
             api_frame,
             placeholder_text="sk-proj-... or ollama",
             show="*",
-            width=420,
+            width=480,
             height=32,
             fg_color="#1c212d",
             border_color="#262c3d"
@@ -70,33 +90,29 @@ class SettingsDialog:
             self.api_key_entry.insert(0, self.config["api_key"])
 
         # Model selection
-        model_frame = ctk.CTkFrame(self.window, fg_color="transparent")
-        model_frame.pack(fill="x", padx=30, pady=8)
-        
-        ctk.CTkLabel(model_frame, text="Select Model:", font=("SF Pro", 12)).pack(anchor="w")
+        model_frame = ctk.CTkFrame(self.tab_api, fg_color="transparent")
+        model_frame.pack(fill="x", padx=20, pady=6)
+        ctk.CTkLabel(model_frame, text="Model Name:", font=("SF Pro", 12)).pack(anchor="w")
         self.model_combo = ctk.CTkComboBox(
             model_frame,
-            values=["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "qwen3.5:9b"],
-            width=420,
+            values=["gpt-4o-mini", "gpt-4o", "qwen3.5:9b", "gpt-4-turbo"],
+            width=480,
             height=32,
             fg_color="#1c212d",
             button_color="#2fa572",
-            button_hover_color="#106a43",
             border_color="#262c3d"
         )
         self.model_combo.pack(fill="x", pady=(4, 0))
-        current_model = self.config.get("model", "gpt-4o-mini")
-        self.model_combo.set(current_model)
+        self.model_combo.set(self.config.get("model", "gpt-4o-mini"))
 
-        # Base URL (for OpenAI or Local Ollama)
-        url_frame = ctk.CTkFrame(self.window, fg_color="transparent")
-        url_frame.pack(fill="x", padx=30, pady=8)
-        
-        ctk.CTkLabel(url_frame, text="API Base URL (Leave empty for standard OpenAI):", font=("SF Pro", 12)).pack(anchor="w")
+        # Base URL
+        url_frame = ctk.CTkFrame(self.tab_api, fg_color="transparent")
+        url_frame.pack(fill="x", padx=20, pady=6)
+        ctk.CTkLabel(url_frame, text="API Base URL (Leave empty for OpenAI):", font=("SF Pro", 12)).pack(anchor="w")
         self.url_entry = ctk.CTkEntry(
             url_frame,
             placeholder_text="https://api.openai.com/v1 (or http://localhost:11434/v1 for Ollama)",
-            width=420,
+            width=480,
             height=32,
             fg_color="#1c212d",
             border_color="#262c3d"
@@ -105,9 +121,9 @@ class SettingsDialog:
         if self.config.get("base_url"):
             self.url_entry.insert(0, self.config["base_url"])
 
-        # Quick preset buttons for convenience
-        preset_frame = ctk.CTkFrame(self.window, fg_color="transparent")
-        preset_frame.pack(fill="x", padx=30, pady=2)
+        # Presets toggles
+        preset_frame = ctk.CTkFrame(self.tab_api, fg_color="transparent")
+        preset_frame.pack(fill="x", padx=20, pady=6)
         ctk.CTkButton(
             preset_frame,
             text="Use OpenAI Default",
@@ -115,32 +131,73 @@ class SettingsDialog:
             fg_color="#1c212d",
             hover_color="#2fa572",
             width=140,
-            height=22,
+            height=24,
             command=self._set_openai_preset
         ).pack(side="left", padx=(0, 8))
         
         ctk.CTkButton(
             preset_frame,
-            text="Use Local Ollama",
+            text="Use Local Ollama (Qwen)",
             font=("SF Pro", 10),
             fg_color="#1c212d",
             hover_color="#2fa572",
-            width=140,
-            height=22,
+            width=150,
+            height=24,
             command=self._set_ollama_preset
         ).pack(side="left")
 
-        # Save button
+        # Save Button
         ctk.CTkButton(
-            self.window,
-            text="Save Settings",
+            self.tab_api,
+            text="Save API Configuration",
             font=("SF Pro", 13, "bold"),
             fg_color="#2fa572",
             hover_color="#106a43",
             height=36,
             corner_radius=8,
             command=self._save
-        ).pack(pady=(16, 0), padx=30, fill="x")
+        ).pack(pady=(16, 0), padx=20, fill="x")
+
+    def _build_presets_tab(self):
+        ctk.CTkLabel(
+            self.tab_presets,
+            text="Verified Scientific Experiments",
+            font=("SF Pro", 15, "bold"),
+            text_color="#ffffff"
+        ).pack(pady=(6, 8))
+
+        scroll = ctk.CTkScrollableFrame(self.tab_presets, fg_color="#0e1117", corner_radius=8)
+        scroll.pack(fill="both", expand=True, padx=8, pady=(0, 6))
+
+        for exp in PRESET_EXPERIMENTS:
+            card = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=8, border_width=1, border_color="#262c3d")
+            card.pack(fill="x", pady=6, padx=4)
+
+            top_row = ctk.CTkFrame(card, fg_color="transparent")
+            top_row.pack(fill="x", padx=10, pady=(8, 2))
+            ctk.CTkLabel(top_row, text=exp["title"], font=("SF Pro", 12, "bold"), text_color="#2fa572").pack(side="left")
+
+            load_btn = ctk.CTkButton(
+                top_row,
+                text="Load Experiment",
+                font=("SF Pro", 10, "bold"),
+                fg_color="#2fa572",
+                hover_color="#106a43",
+                width=110,
+                height=24,
+                corner_radius=5,
+                command=lambda e_id=exp["id"]: self._load_preset(e_id)
+            )
+            load_btn.pack(side="right")
+
+            # Aim
+            ctk.CTkLabel(card, text=f"🎯 Aim: {exp['aim']}", font=("SF Pro", 10), text_color="#c9d1d9", wraplength=480).pack(anchor="w", padx=10, pady=2)
+            
+            # Theory
+            ctk.CTkLabel(card, text=f"📐 Theory: {exp['theoretical_benchmark']}", font=("SF Pro", 10, "bold"), text_color="#58a6ff", wraplength=480).pack(anchor="w", padx=10, pady=2)
+
+            # Conclusion
+            ctk.CTkLabel(card, text=f"💡 Conclusion: {exp['conclusion']}", font=("SF Pro", 9), text_color="#8b949e", wraplength=480).pack(anchor="w", padx=10, pady=(2, 8))
 
     def _set_openai_preset(self):
         self.model_combo.set("gpt-4o-mini")
@@ -152,6 +209,10 @@ class SettingsDialog:
         self.model_combo.set("qwen3.5:9b")
         self.url_entry.delete(0, "end")
         self.url_entry.insert(0, "http://localhost:11434/v1")
+
+    def _load_preset(self, preset_id: str):
+        self.on_load_preset_callback(preset_id)
+        self.window.destroy()
 
     def _save(self):
         new_key = self.api_key_entry.get().strip()
