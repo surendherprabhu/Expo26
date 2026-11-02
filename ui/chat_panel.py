@@ -1,6 +1,6 @@
 """
 Chat Panel Module for Universal AI Simulation Environment.
-40% left pane: Displays conversation history, status, quick demo presets, and user prompt input.
+40% left pane: Displays conversation history, status, user prompt input, and send actions.
 """
 
 import threading
@@ -14,16 +14,14 @@ class ChatPanel(ctk.CTkFrame):
         self.on_reset_world = on_reset_world
         
         self._build_top_bar()
-        self._build_presets_bar()
         self._build_chat_display()
         self._build_input_bar()
 
     def _build_top_bar(self):
-        """Top bar matching user's sketch: Status indicator & quick reset button."""
+        """Top bar: Connection status indicator & quick reset button."""
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
-        top_frame.pack(fill="x", padx=12, pady=(10, 4))
+        top_frame.pack(fill="x", padx=12, pady=(10, 6))
         
-        # Left status indicator
         self.status_label = ctk.CTkLabel(
             top_frame,
             text="Online 🌐",
@@ -32,7 +30,6 @@ class ChatPanel(ctk.CTkFrame):
         )
         self.status_label.pack(side="left")
         
-        # Right action button ("IDK / Random Button" from sketch -> Quick Clear/Reset)
         self.reset_btn = ctk.CTkButton(
             top_frame,
             text="↺ Clear World",
@@ -45,37 +42,6 @@ class ChatPanel(ctk.CTkFrame):
             command=self.on_reset_world
         )
         self.reset_btn.pack(side="right")
-
-    def _build_presets_bar(self):
-        """Quick demo buttons for instant testing and presentation."""
-        preset_frame = ctk.CTkFrame(self, fg_color="transparent")
-        preset_frame.pack(fill="x", padx=12, pady=(0, 6))
-
-        presets = [
-            ("Newton's Cradle", "Simulate a 5-ball Newton's Cradle"),
-            ("Truss Bridge", "Build a pinned bridge span with a heavy test load"),
-            ("Ramp & Sphere", "Create an inclined ramp with rolling and sliding bodies"),
-            ("Block Tower", "Stack a 5-block vertical tower")
-        ]
-
-        for label, prompt in presets:
-            btn = ctk.CTkButton(
-                preset_frame,
-                text=label,
-                font=("SF Pro", 10),
-                fg_color="#1c212d",
-                hover_color="#2fa572",
-                text_color="#c9d1d9",
-                height=22,
-                corner_radius=5,
-                command=lambda p=prompt: self._trigger_preset(p)
-            )
-            btn.pack(side="left", padx=2, expand=True, fill="x")
-
-    def _trigger_preset(self, prompt: str):
-        self.input_entry.delete(0, "end")
-        self.input_entry.insert(0, prompt)
-        self._handle_send()
 
     def _build_chat_display(self):
         """Scrollable chat history with word wrapping."""
@@ -96,8 +62,8 @@ class ChatPanel(ctk.CTkFrame):
         self.append_message(
             "System",
             "Universal AI Simulation Lab initialized.\n"
-            "Ask me to construct physical mechanisms, structural trusses, collision tests, or energy networks conversationally.\n"
-            "You can also click and fling any object in the physics canvas with your mouse!"
+            "Ask me to construct physical mechanisms, structural trusses, collision experiments, or inclined planes conversationally.\n"
+            "Interactive physics: Click, drag, and fling any object in the viewport with your mouse."
         )
 
     def _build_input_bar(self):
@@ -107,7 +73,7 @@ class ChatPanel(ctk.CTkFrame):
 
         self.input_entry = ctk.CTkEntry(
             input_frame,
-            placeholder_text="Describe a system (e.g. 'Build a bridge and drop a 40kg load')...",
+            placeholder_text="Describe a simulation experiment...",
             font=("SF Pro", 12),
             fg_color="#1c212d",
             border_color="#262c3d",
@@ -138,7 +104,6 @@ class ChatPanel(ctk.CTkFrame):
         self.input_entry.delete(0, "end")
         self.append_message("You", text)
         
-        # Disable send while processing
         self.send_btn.configure(state="disabled")
         
         def run():

@@ -1,6 +1,6 @@
 """
 Physics Engine Module for Universal AI Simulation Environment.
-Uses Pymunk (Chipmunk2D) to simulate 2D rigid-body dynamics, constraints, and energy calculations.
+Uses Pymunk (Chipmunk2D) to simulate 2D rigid-body dynamics, constraints, and dynamic scientific telemetry.
 """
 
 import math
@@ -15,18 +15,25 @@ class PhysicsEngine:
         self.space.gravity = (0, 900)  # Standard downward gravity
         self.space.damping = 0.999      # Slight air resistance
         
-        # Registry of named bodies and shapes for conversational referencing
+        # Registry of named bodies, shapes, and joints
         self.named_bodies: Dict[str, pymunk.Body] = {}
         self.named_shapes: Dict[str, pymunk.Shape] = {}
         self.named_joints: Dict[str, pymunk.Constraint] = {}
         self.colors: Dict[str, Tuple[int, int, int]] = {}
+        
+        # Velocity history for acceleration calculations: {body_name: (last_v, last_time)}
+        self._prev_velocities: Dict[str, Tuple[float, float]] = {}
+        self._current_accelerations: Dict[str, float] = {}
+        
+        # Dynamic Experiment Variables defined by the AI model
+        self.monitored_metrics: List[Dict[str, Any]] = []
         
         # Telemetry history
         self.total_sim_time = 0.0
         self.step_dt = 1.0 / 60.0
         self.paused = False
         
-        # Build default boundary walls so objects don't fall off screen
+        # Build default boundary walls
         self._create_boundaries()
 
     def _create_boundaries(self, thickness: float = 20.0):
@@ -34,19 +41,16 @@ class PhysicsEngine:
         w = float(self.width)
         h = float(self.height)
         
-        # Floor
         floor = pymunk.Segment(self.space.static_body, (0, h - thickness), (w, h - thickness), thickness)
         floor.elasticity = 0.5
         floor.friction = 0.8
         floor.color = (60, 65, 75, 255)
         
-        # Left wall
         left_wall = pymunk.Segment(self.space.static_body, (thickness, 0), (thickness, h), thickness)
         left_wall.elasticity = 0.5
         left_wall.friction = 0.5
         left_wall.color = (60, 65, 75, 255)
         
-        # Right wall
         right_wall = pymunk.Segment(self.space.static_body, (w - thickness, 0), (w - thickness, h), thickness)
         right_wall.elasticity = 0.5
         right_wall.friction = 0.5
@@ -59,13 +63,10 @@ class PhysicsEngine:
 
     def reset(self):
         """Clears all objects and re-initializes boundaries."""
-        # Remove all constraints
         for constraint in list(self.space.constraints):
             self.space.remove(constraint)
-        # Remove all shapes
         for shape in list(self.space.shapes):
             self.space.remove(shape)
-        # Remove all non-static bodies
         for body in list(self.space.bodies):
             if body != self.space.static_body:
                 self.space.remove(body)
@@ -74,15 +75,33 @@ class PhysicsEngine:
         self.named_shapes.clear()
         self.named_joints.clear()
         self.colors.clear()
+        self._prev_velocities.clear()
+        self._current_accelerations.clear()
+        self.monitored_metrics.clear()
         self.total_sim_time = 0.0
         self.space.gravity = (0, 900)
         self._create_boundaries()
 
+    def set_monitored_metrics(self, metrics: List[Dict[str, Any]]):
+        """Sets the dynamic experiment variables defined by the AI."""
+        self.monitored_metrics = metrics
+
     def step(self, dt: Optional[float] = None) -> None:
-        """Advances simulation by dt if not paused."""
+        """Advances simulation by dt if not paused, updating accelerations."""
         if self.paused:
             return
         actual_dt = dt or self.step_dt
+        
+        # Track velocities before step to compute acceleration
+        for name, body in self.named_bodies.items():
+            if body.body_type == pymunk.Body.DYNAMIC:
+                v_current = body.velocity.length
+                prev_v, _ = self._prev_velocities.get(name, (v_current, self.total_sim_time))
+                accel = (v_current - prev_v) / max(0.0001, actual_dt)
+                # Convert from pixels/s^2 to m/s^2 (100 px = 1 m)
+                self._current_accelerations[name] = accel / 100.0
+                self._prev_velocities[name] = (v_current, self.total_sim_time)
+                
         self.space.step(actual_dt)
         self.total_sim_time += actual_dt
 
@@ -97,7 +116,7 @@ class PhysicsEngine:
         elasticity: float = 0.6,
         friction: float = 0.7,
         static: bool = False,
-        color: Tuple[int, int, int] = (46, 204, 113) # Default emerald green
+        color: Tuple[int, int, int] = (46, 204, 113)
     ) -> bool:
         """Creates a rectangular rigid body."""
         try:
@@ -138,7 +157,7 @@ class PhysicsEngine:
         elasticity: float = 0.8,
         friction: float = 0.5,
         static: bool = False,
-        color: Tuple[int, int, int] = (52, 152, 219) # Default blue
+        color: Tuple[int, int, int] = (52, 152, 219)
     ) -> bool:
         """Creates a circular rigid body."""
         try:
@@ -179,9 +198,9 @@ class PhysicsEngine:
         thickness: float = 6.0,
         elasticity: float = 0.5,
         friction: float = 0.6,
-        color: Tuple[int, int, int] = (149, 165, 166) # Grey
+        color: Tuple[int, int, int] = (149, 165, 166)
     ) -> bool:
-        """Creates a static line segment (ramps, shelves, incline planes)."""
+        """Creates a static line segment (ramps, inclined planes, shelves)."""
         try:
             shape = pymunk.Segment(self.space.static_body, (x1, y1), (x2, y2), thickness)
             shape.elasticity = elasticity
@@ -258,47 +277,90 @@ class PhysicsEngine:
         """Sets world gravity vector."""
         self.space.gravity = (gx, gy)
 
-    def get_telemetry(self) -> Dict[str, Any]:
-        """Calculates live physical measurements for the Real-time Statistics panel."""
-        total_kinetic_energy = 0.0
-        total_potential_energy = 0.0
-        max_velocity = 0.0
-        active_bodies_count = 0
-        
-        # Ground level is approximately at height - 20
+    def get_dynamic_telemetry(self) -> Dict[str, Any]:
+        """
+        Evaluates and returns the actual variables returned by the AI model,
+        measuring what is actually occurring on screen.
+        """
+        measured_items = []
+        g = abs(self.space.gravity[1]) / 100.0  # scaled m/s^2 (approx 9.0 m/s^2)
         ground_y = self.height - 20.0
-        g = abs(self.space.gravity[1])
         
-        for body in self.space.bodies:
-            if body.body_type == pymunk.Body.DYNAMIC:
-                active_bodies_count += 1
-                m = body.mass
-                v = body.velocity.length
-                w = body.angular_velocity
-                I = body.moment
-                
-                # E_k = 1/2 m v^2 + 1/2 I w^2
-                ek = 0.5 * m * (v ** 2) + 0.5 * I * (w ** 2)
-                total_kinetic_energy += ek
-                
-                if v > max_velocity:
-                    max_velocity = v
-                    
-                # E_p = m g h (height above ground in meters or scale factor)
-                # Let 100 pixels = 1 meter
-                h_meters = max(0.0, (ground_y - body.position.y) / 100.0)
-                ep = m * (g / 100.0) * h_meters
-                total_potential_energy += ep
+        for metric in self.monitored_metrics:
+            m_id = metric.get("id", "var")
+            name = metric.get("name", m_id)
+            unit = metric.get("unit", "")
+            m_type = metric.get("type", "constant")
+            target = metric.get("target_body", "")
+            val_display = "--"
 
-        total_mechanical_energy = total_kinetic_energy + total_potential_energy
-        
+            if m_type == "constant":
+                val = metric.get("value", 0.0)
+                val_display = f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
+
+            elif m_type == "velocity":
+                body = self.named_bodies.get(target)
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    v_mps = body.velocity.length / 100.0
+                    val_display = f"{v_mps:.2f}"
+
+            elif m_type == "accel":
+                acc = self._current_accelerations.get(target, 0.0)
+                val_display = f"{acc:.2f}"
+
+            elif m_type == "mass":
+                body = self.named_bodies.get(target)
+                if body:
+                    val_display = f"{body.mass:.2f}"
+
+            elif m_type == "friction":
+                shape = self.named_shapes.get(target)
+                if shape:
+                    val_display = f"{shape.friction:.2f}"
+
+            elif m_type == "angle":
+                shape = self.named_shapes.get(target)
+                if shape and isinstance(shape, pymunk.Segment):
+                    dx = shape.b.x - shape.a.x
+                    dy = shape.b.y - shape.a.y
+                    deg = abs(math.degrees(math.atan2(dy, dx)))
+                    val_display = f"{deg:.1f}"
+                else:
+                    body = self.named_bodies.get(target)
+                    if body:
+                        deg = math.degrees(body.angle) % 360
+                        val_display = f"{deg:.1f}"
+
+            elif m_type == "kinetic_energy":
+                body = self.named_bodies.get(target)
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    v = body.velocity.length / 100.0
+                    ke = 0.5 * body.mass * (v ** 2)
+                    val_display = f"{ke:.2f}"
+
+            elif m_type == "potential_energy":
+                body = self.named_bodies.get(target)
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    h_m = max(0.0, (ground_y - body.position.y) / 100.0)
+                    pe = body.mass * g * h_m
+                    val_display = f"{pe:.2f}"
+
+            elif m_type == "normal_force":
+                body = self.named_bodies.get(target)
+                angle_deg = metric.get("value", 30.0)
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    fn = body.mass * g * math.cos(math.radians(angle_deg))
+                    val_display = f"{fn:.2f}"
+
+            measured_items.append({
+                "id": m_id,
+                "name": name,
+                "value": val_display,
+                "unit": unit
+            })
+
         return {
-            "active_objects": active_bodies_count,
-            "kinetic_energy_j": round(total_kinetic_energy / 1000.0, 2), # Scaled J
-            "potential_energy_j": round(total_potential_energy / 1000.0, 2),
-            "total_energy_j": round(total_mechanical_energy / 1000.0, 2),
-            "max_velocity_mps": round(max_velocity / 100.0, 2), # Scaled m/s
-            "sim_time_sec": round(self.total_sim_time, 2),
-            "gravity": (self.space.gravity[0], self.space.gravity[1]),
+            "metrics": measured_items,
+            "sim_time": round(self.total_sim_time, 2),
             "is_paused": self.paused
         }

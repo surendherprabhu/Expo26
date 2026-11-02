@@ -46,7 +46,8 @@ class AppWindow:
         self.ai_agent = AIAgent(
             self.physics,
             api_key=self.config.get("api_key", ""),
-            model=self.config.get("model", "gpt-4o-mini")
+            model=self.config.get("model", "gpt-4o-mini"),
+            base_url=self.config.get("base_url", "")
         )
 
         # Build UI layout
@@ -267,8 +268,8 @@ class AppWindow:
     def _open_settings(self):
         self.settings_dialog.show()
 
-    def _on_settings_saved(self, new_key: str, new_model: str):
-        self.ai_agent.set_api_key(new_key)
+    def _on_settings_saved(self, new_key: str, new_model: str, new_url: str = ""):
+        self.ai_agent.set_api_key(new_key, new_url)
         self.ai_agent.set_model(new_model)
         self.model_label.configure(text=f"Model: {new_model}")
         
@@ -297,8 +298,8 @@ class AppWindow:
         self.canvas.create_image(0, 0, anchor="nw", image=photo)
         self._cached_photo = photo  # Keep reference to prevent GC
 
-        # Update telemetry stats
-        telemetry = self.physics.get_telemetry()
+        # Update telemetry stats with dynamic experiment metrics
+        telemetry = self.physics.get_dynamic_telemetry()
         self.stats_panel.update_telemetry(telemetry)
 
         # Schedule next tick (~16ms for 60 FPS)
