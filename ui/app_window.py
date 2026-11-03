@@ -4,9 +4,11 @@ Integrates:
 - 40:60 Split CustomTkinter interface
 - Pymunk 2D physics engine with solid triangular wedges
 - Experiment Freeze at t=0.0s with explicit [▶ Release / Run] control
+- Light modern laboratory canvas aesthetic with theme toggle (☀️ Light Lab / 🌙 Dark Mode)
+- 1-Click quick Demo Presets dropdown for fast live demonstrations
 - Toggleable Mouse Grab interaction switch
 - Dynamic telemetry & Formal Experiment Control Sheet / Report
-- Settings menu with Preset Experiments library
+- Settings menu with full Preset Experiments library
 """
 
 import time
@@ -15,7 +17,7 @@ import customtkinter as ctk
 from core.physics_engine import PhysicsEngine
 from core.renderer import PhysicsRenderer
 from core.ai_agent import AIAgent
-from core.presets import load_preset_by_id
+from core.presets import PRESET_EXPERIMENTS, load_preset_by_id
 from ui.chat_panel import ChatPanel
 from ui.stats_panel import StatsPanel
 from ui.settings_dialog import SettingsDialog, load_config
@@ -43,9 +45,11 @@ class AppWindow:
 
         self.config = load_config()
         
-        # Initialize Core Engines
+        # Initialize Core Engines with clean light lab rendering by default
         self.physics = PhysicsEngine(width=760, height=480)
         self.renderer = PhysicsRenderer(self.physics, width=760, height=480)
+        self.renderer.set_theme("light")
+        
         self.ai_agent = AIAgent(
             self.physics,
             api_key=self.config.get("api_key", ""),
@@ -138,22 +142,52 @@ class AppWindow:
         cv_header.pack(fill="x", padx=10, pady=(6, 0))
         cv_header.pack_propagate(False)
 
+        # Quick Demo Presets Dropdown
         ctk.CTkLabel(
             cv_header,
-            text="APPARATUS VIEWPORT",
-            font=("SF Pro", 11, "bold"),
+            text="🔬 Demo:",
+            font=("SF Pro", 10, "bold"),
             text_color="#8b949e"
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, 4))
+
+        self.preset_combo = ctk.CTkComboBox(
+            cv_header,
+            values=[p["title"] for p in PRESET_EXPERIMENTS],
+            command=self._on_quick_preset_select,
+            width=180,
+            height=24,
+            font=("SF Pro", 9),
+            dropdown_font=("SF Pro", 10),
+            fg_color="#1c212d",
+            button_color="#2fa572",
+            border_color="#262c3d"
+        )
+        self.preset_combo.pack(side="left", padx=(0, 8))
+        self.preset_combo.set("Choose Demo Preset...")
+
+        # Canvas Theme Toggle (Light Lab / Dark Mode)
+        self.theme_btn = ctk.CTkButton(
+            cv_header,
+            text="☀️ Light Lab",
+            font=("SF Pro", 9),
+            fg_color="#1c212d",
+            hover_color="#2fa572",
+            width=75,
+            height=24,
+            command=self._toggle_theme
+        )
+        self.theme_btn.pack(side="left", padx=2)
 
         # Mouse Grab Toggle Switch
         self.mouse_switch = ctk.CTkSwitch(
             cv_header,
-            text="Mouse Grab",
-            font=("SF Pro", 10),
+            text="Grab",
+            font=("SF Pro", 9),
             progress_color="#2fa572",
+            width=36,
             command=self._on_toggle_mouse
         )
-        self.mouse_switch.pack(side="left", padx=(14, 0))
+        self.mouse_switch.pack(side="left", padx=(8, 0))
         self.mouse_switch.select()
 
         # Primary Release / Run button
@@ -163,42 +197,42 @@ class AppWindow:
             font=("SF Pro", 10, "bold"),
             fg_color="#2fa572",
             hover_color="#106a43",
-            width=100,
+            width=95,
             height=24,
             command=self._toggle_run
         )
-        self.run_btn.pack(side="right", padx=3)
+        self.run_btn.pack(side="right", padx=2)
 
         # Reset to t=0 button
         self.reset_t0_btn = ctk.CTkButton(
             cv_header,
-            text="↺ Reset (t=0)",
-            font=("SF Pro", 10),
+            text="↺ Reset",
+            font=("SF Pro", 9),
             fg_color="#1c212d",
             hover_color="#3d4455",
-            width=85,
+            width=60,
             height=24,
             command=self._reset_to_t0
         )
-        self.reset_t0_btn.pack(side="right", padx=3)
+        self.reset_t0_btn.pack(side="right", padx=2)
 
         # End Experiment & Report button
         self.end_exp_btn = ctk.CTkButton(
             cv_header,
-            text="📋 End & Report",
-            font=("SF Pro", 10),
+            text="📋 Report",
+            font=("SF Pro", 9),
             fg_color="#1c212d",
             hover_color="#58a6ff",
-            width=90,
+            width=65,
             height=24,
             command=self._on_end_experiment
         )
-        self.end_exp_btn.pack(side="right", padx=3)
+        self.end_exp_btn.pack(side="right", padx=2)
 
-        # Tkinter Canvas for offscreen Pygame rendering
+        # Tkinter Canvas (Light Laboratory aesthetic by default)
         self.canvas = tk.Canvas(
             self.viewport_frame,
-            bg="#0d1117",
+            bg="#f8fafc",
             highlightthickness=0,
             cursor="hand2"
         )
@@ -233,7 +267,7 @@ class AppWindow:
 
         ctk.CTkLabel(
             self.footer_frame,
-            text="Click '▶ Release / Run' to trigger motion. Toggle Mouse Grab to interact.",
+            text="Click '▶ Release / Run' to start motion. Select any demo preset above for 1-click loading.",
             font=("SF Pro", 10),
             text_color="#6e7681"
         ).pack(side="left", padx=10)
@@ -245,6 +279,22 @@ class AppWindow:
             text_color="#8b949e"
         )
         self.model_label.pack(side="right", padx=16)
+
+    def _toggle_theme(self):
+        """Toggles rendering canvas between light laboratory aesthetic and dark mode."""
+        if self.renderer.theme == "light":
+            self.renderer.set_theme("dark")
+            self.canvas.configure(bg="#0d1117")
+            self.theme_btn.configure(text="🌙 Dark Mode")
+        else:
+            self.renderer.set_theme("light")
+            self.canvas.configure(bg="#f8fafc")
+            self.theme_btn.configure(text="☀️ Light Lab")
+
+    def _on_quick_preset_select(self, selected_title: str):
+        preset = next((p for p in PRESET_EXPERIMENTS if p["title"] == selected_title), None)
+        if preset:
+            self._on_load_preset(preset["id"])
 
     def _on_toggle_mouse(self):
         is_on = bool(self.mouse_switch.get())
@@ -288,6 +338,7 @@ class AppWindow:
     def _handle_reset_world(self):
         self.physics.reset()
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
+        self.preset_combo.set("Choose Demo Preset...")
         self.left_pane.append_message("System", "World cleared.")
 
     def _handle_user_message(self, text: str):
@@ -296,7 +347,6 @@ class AppWindow:
 
     def _on_message_finished(self, explanation: str, actions: list):
         self.left_pane.append_message("AI Agent", explanation, actions)
-        # Apparatus is frozen at t=0 ready for user
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
         self.stats_panel.show_telemetry_view()
 
@@ -318,9 +368,9 @@ class AppWindow:
     def _on_load_preset(self, preset_id: str):
         preset = load_preset_by_id(self.physics, preset_id)
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
+        self.preset_combo.set(preset["title"])
         self.stats_panel.show_telemetry_view()
         
-        # Post crisp experiment protocol into chat
         self.left_pane.append_message(
             "System",
             f"🧪 Loaded Preset: {preset['title']}\n"

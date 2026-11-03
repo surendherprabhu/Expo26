@@ -139,8 +139,15 @@ SIMULATION_TOOLS = [
                                 "id": {"type": "string"},
                                 "name": {"type": "string"},
                                 "unit": {"type": "string"},
-                                "type": {"type": "string", "enum": ["constant", "velocity", "accel", "normal_force"]},
-                                "target_body": {"type": "string"},
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["velocity", "accel", "height", "kinetic_energy", "potential_energy", "total_energy", "momentum", "normal_force", "constant"],
+                                    "description": "Measurement type: 'velocity' (m/s), 'accel' (m/s²), 'height' (m above ground), 'kinetic_energy' (J), 'momentum' (kg·m/s), 'constant' (fixed value)."
+                                },
+                                "target_body": {
+                                    "type": "string",
+                                    "description": "Name of the target body to measure (e.g. 'heavy_sphere')."
+                                },
                                 "value": {"type": "number"}
                             },
                             "required": ["id", "name", "unit", "type"]
@@ -165,11 +172,15 @@ SIMULATION_TOOLS = [
 ]
 
 SYSTEM_PROMPT = """You are the AI Scientific Experimentation Controller for an interactive physics simulation lab (SDG 9).
-Canvas: 760 px wide, 480 px high. Ground floor is at y = 460.
+Canvas: 760 px wide, 480 px high. Ground floor is at y = 460. Standard gravity: (0, 900).
 
 CRITICAL INSTRUCTIONS:
 1. When asked to simulate an inclined plane, use `create_wedge` (solid triangle resting on floor), and place the sliding block using `on_wedge="<wedge_name>"`.
-2. Always call `set_experiment_metrics` to track 2-5 relevant physical quantities.
+2. ALWAYS call `set_experiment_metrics` to track 2-5 relevant physical quantities.
+   - For free fall / drops: track 'velocity', 'height', 'kinetic_energy' with target_body set to the created body names.
+   - For inclined planes: track angle θ (constant), friction μ (constant), velocity, acceleration, normal_force.
+   - For collisions: track velocities (v1, v2), momentum, kinetic energy.
+   - Set `target_body` to the exact name of the body you created.
 3. CONVERSATIONAL STYLE:
    - DO NOT write multi-paragraph textbook essays.
    - DO NOT output ASCII art or long equation derivations.

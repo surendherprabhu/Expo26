@@ -1,8 +1,8 @@
 """
 Renderer Module for Universal AI Simulation Environment.
-Renders Pymunk rigid bodies onto an offscreen Pygame surface with dark-mode aesthetic,
+Renders Pymunk rigid bodies onto an offscreen Pygame surface with a clean,
+light modern laboratory aesthetic (or dark theme toggle),
 and converts frames to PIL ImageTk for seamless embedding in CustomTkinter.
-Supports toggleable mouse picking and flinging.
 """
 
 import os
@@ -17,7 +17,8 @@ class PhysicsRenderer:
         self.engine = physics_engine
         self.width = width
         self.height = height
-        self.mouse_enabled = True  # Toggleable via UI switch
+        self.mouse_enabled = True
+        self.theme = "light"  # Default to clean modern laboratory aesthetic!
         
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         pygame.init()
@@ -25,27 +26,39 @@ class PhysicsRenderer:
         self.surface = pygame.Surface((self.width, self.height))
         self.draw_options = pymunk.pygame_util.DrawOptions(self.surface)
         
-        # Stylistic colors
-        self.bg_color = (13, 17, 23)
-        self.grid_color = (25, 32, 44)
-        self.accent_green = (47, 165, 114)
-        
-        # Mouse interaction state
+        self._apply_theme_colors()
+        self._init_mouse_body()
+        self._last_photo = None
+
+    def _init_mouse_body(self):
         self.mouse_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
         self.mouse_joint: Optional[pymunk.PivotJoint] = None
         self.engine.space.add(self.mouse_body)
-        
-        self._last_photo = None
+
+    def _apply_theme_colors(self):
+        if self.theme == "light":
+            # Clean, high-clarity modern laboratory / blueprint aesthetic
+            self.bg_color = (248, 250, 252)       # Soft clean lab canvas (#f8fafc)
+            self.grid_color = (226, 232, 240)     # Crisp subtle grid (#e2e8f0)
+            self.accent_color = (16, 185, 129)    # Emerald (#10b981)
+        else:
+            # Classic dark mode
+            self.bg_color = (13, 17, 23)
+            self.grid_color = (30, 41, 59)
+            self.accent_color = (47, 165, 114)
+
+    def set_theme(self, theme_name: str):
+        """Switches rendering theme ('light' or 'dark')."""
+        self.theme = theme_name.lower()
+        self._apply_theme_colors()
 
     def set_mouse_interaction(self, enabled: bool):
-        """Enables or disables manual mouse grabbing/dragging."""
         self.mouse_enabled = enabled
         if not enabled and self.mouse_joint:
             self.engine.space.remove(self.mouse_joint)
             self.mouse_joint = None
 
     def resize(self, width: int, height: int):
-        """Resizes the offscreen render surface."""
         if width > 50 and height > 50 and (width != self.width or height != self.height):
             self.width = width
             self.height = height
@@ -55,7 +68,6 @@ class PhysicsRenderer:
             self.draw_options = pymunk.pygame_util.DrawOptions(self.surface)
 
     def on_mouse_down(self, x: float, y: float):
-        """User clicks on physics canvas: pick up nearest dynamic body if enabled."""
         if not self.mouse_enabled:
             return
         self.mouse_body.position = (x, y)
@@ -69,39 +81,36 @@ class PhysicsRenderer:
             self.engine.space.add(self.mouse_joint)
 
     def on_mouse_move(self, x: float, y: float):
-        """Update dragged body position."""
         if not self.mouse_enabled:
             return
         self.mouse_body.position = (x, y)
 
     def on_mouse_up(self):
-        """Release grabbed body."""
         if self.mouse_joint:
             self.engine.space.remove(self.mouse_joint)
             self.mouse_joint = None
 
     def render_frame(self) -> ImageTk.PhotoImage:
-        """Renders one frame and returns an ImageTk.PhotoImage for Tkinter."""
+        """Renders one frame and returns an ImageTk.PhotoImage."""
         self.surface.fill(self.bg_color)
         
-        # Subtle background grid
+        # Subtle architectural grid
         grid_step = 50
         for gx in range(0, self.width, grid_step):
             pygame.draw.line(self.surface, self.grid_color, (gx, 0), (gx, self.height), 1)
         for gy in range(0, self.height, grid_step):
             pygame.draw.line(self.surface, self.grid_color, (0, gy), (self.width, gy), 1)
 
-        # Draw Pymunk bodies
+        # Draw Pymunk bodies via debug_draw
         self.engine.space.debug_draw(self.draw_options)
 
         # Highlight mouse interaction line if active
         if self.mouse_enabled and self.mouse_joint:
             anchor_a = self.mouse_body.position
             anchor_b = self.mouse_joint.b.position
-            pygame.draw.line(self.surface, self.accent_green, (int(anchor_a.x), int(anchor_a.y)), (int(anchor_b.x), int(anchor_b.y)), 2)
-            pygame.draw.circle(self.surface, (255, 255, 255), (int(anchor_a.x), int(anchor_a.y)), 4)
+            pygame.draw.line(self.surface, self.accent_color, (int(anchor_a.x), int(anchor_a.y)), (int(anchor_b.x), int(anchor_b.y)), 3)
+            pygame.draw.circle(self.surface, (15, 23, 42) if self.theme == "light" else (255, 255, 255), (int(anchor_a.x), int(anchor_a.y)), 5)
 
-        # Convert to PIL Image -> ImageTk PhotoImage
         raw_data = pygame.image.tobytes(self.surface, "RGBA")
         pil_img = Image.frombytes("RGBA", (self.width, self.height), raw_data)
         self._last_photo = ImageTk.PhotoImage(pil_img)

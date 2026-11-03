@@ -1,7 +1,7 @@
 """
 Physics Engine Module for Universal AI Simulation Environment.
 Uses Pymunk (Chipmunk2D) to simulate 2D rigid-body dynamics, triangular wedges, 
-constraints, and experiment data logging for formal scientific reports.
+constraints, dynamic scientific telemetry with fuzzy body resolution, and automatic metrics.
 """
 
 import math
@@ -13,7 +13,7 @@ class PhysicsEngine:
         self.width = width
         self.height = height
         self.space = pymunk.Space()
-        self.space.gravity = (0, 900)  # Standard downward gravity (9.0 m/s^2 scaled)
+        self.space.gravity = (0, 900)  # Standard downward gravity (~9.0 m/s^2 scaled)
         self.space.damping = 0.999      # Slight air resistance
         
         # Registry of named bodies, shapes, and joints
@@ -61,17 +61,17 @@ class PhysicsEngine:
         floor = pymunk.Segment(self.space.static_body, (0, h - thickness), (w, h - thickness), thickness)
         floor.elasticity = 0.5
         floor.friction = 0.8
-        floor.color = (60, 65, 75, 255)
+        floor.color = (51, 65, 85, 255)  # Sturdy dark slate lab bench
         
         left_wall = pymunk.Segment(self.space.static_body, (thickness, 0), (thickness, h), thickness)
         left_wall.elasticity = 0.5
         left_wall.friction = 0.5
-        left_wall.color = (60, 65, 75, 255)
+        left_wall.color = (51, 65, 85, 255)
         
         right_wall = pymunk.Segment(self.space.static_body, (w - thickness, 0), (w - thickness, h), thickness)
         right_wall.elasticity = 0.5
         right_wall.friction = 0.5
-        right_wall.color = (60, 65, 75, 255)
+        right_wall.color = (51, 65, 85, 255)
         
         self.space.add(floor, left_wall, right_wall)
         self.named_shapes["boundary_floor"] = floor
@@ -150,18 +150,15 @@ class PhysicsEngine:
         height: float,
         friction: float = 0.5,
         elasticity: float = 0.2,
-        color: Tuple[int, int, int] = (70, 80, 95)
+        color: Tuple[int, int, int] = (100, 116, 139)
     ) -> bool:
         """
         Creates a solid triangular incline wedge resting flat on the ground floor.
-        Hypotenuse slopes down from (x_left, floor_y - height) to (x_right, floor_y).
         """
         try:
             floor_y = self.height - 20.0
             top_y = floor_y - height
             
-            # Triangle vertices (anticlockwise in Pymunk coordinate space)
-            # (x_left, floor_y), (x_right, floor_y), (x_left, top_y)
             verts = [
                 (x_left, floor_y),
                 (x_right, floor_y),
@@ -177,7 +174,6 @@ class PhysicsEngine:
             self.named_shapes[name] = shape
             self.colors[name] = color
             
-            # Store metadata for snapping objects onto the hypotenuse
             angle_rad = math.atan2(height, x_right - x_left)
             self.wedge_metadata[name] = {
                 "x_left": x_left,
@@ -205,16 +201,15 @@ class PhysicsEngine:
         elasticity: float = 0.6,
         friction: float = 0.7,
         static: bool = False,
-        color: Tuple[int, int, int] = (46, 204, 113),
+        color: Tuple[int, int, int] = (217, 119, 6),
         on_wedge: Optional[str] = None
     ) -> bool:
-        """Creates a rectangular rigid body. If on_wedge is set, snaps tilted onto wedge slope."""
+        """Creates a rectangular rigid body. If on_wedge is set, snaps onto wedge slope."""
         try:
             body_angle = 0.0
             if on_wedge and on_wedge in self.wedge_metadata:
                 w_meta = self.wedge_metadata[on_wedge]
                 body_angle = w_meta["angle_rad"]
-                # Place near top of incline, offset perpendicularly so it rests cleanly
                 dist_down_slope = width * 1.2
                 x = w_meta["x_left"] + math.cos(body_angle) * dist_down_slope
                 y = w_meta["top_y"] + math.sin(body_angle) * dist_down_slope - (height / 2.0)
@@ -255,7 +250,7 @@ class PhysicsEngine:
         elasticity: float = 0.8,
         friction: float = 0.5,
         static: bool = False,
-        color: Tuple[int, int, int] = (52, 152, 219),
+        color: Tuple[int, int, int] = (37, 99, 235),
         on_wedge: Optional[str] = None
     ) -> bool:
         """Creates a circular rigid body. If on_wedge is set, snaps onto wedge slope."""
@@ -301,7 +296,7 @@ class PhysicsEngine:
         thickness: float = 6.0,
         elasticity: float = 0.5,
         friction: float = 0.6,
-        color: Tuple[int, int, int] = (149, 165, 166)
+        color: Tuple[int, int, int] = (100, 116, 139)
     ) -> bool:
         """Creates a static line segment."""
         try:
@@ -342,8 +337,8 @@ class PhysicsEngine:
             return False
 
     def apply_impulse(self, body_name: str, impulse: Tuple[float, float]) -> bool:
-        """Applies an impulse force."""
-        body = self.named_bodies.get(body_name)
+        """Applies an impulse force with fuzzy body resolution."""
+        body = self._resolve_body(body_name)
         if body and body.body_type == pymunk.Body.DYNAMIC:
             body.apply_impulse_at_local_point(impulse)
             return True
@@ -376,39 +371,127 @@ class PhysicsEngine:
         self.space.step(actual_dt)
         self.total_sim_time += actual_dt
 
+    def _resolve_body(self, target_name: str) -> Optional[pymunk.Body]:
+        """Fuzzy target body resolution to prevent '--' when the AI passes slightly mismatched names."""
+        if not target_name:
+            # Return first dynamic body if target_name is omitted
+            for b in self.named_bodies.values():
+                if b.body_type == pymunk.Body.DYNAMIC:
+                    return b
+            return None
+
+        # 1. Direct match
+        if target_name in self.named_bodies:
+            return self.named_bodies[target_name]
+
+        # 2. Case-insensitive match
+        t_lower = target_name.lower().replace(" ", "_")
+        for name, b in self.named_bodies.items():
+            if name.lower() == t_lower:
+                return b
+
+        # 3. Substring match
+        for name, b in self.named_bodies.items():
+            if t_lower in name.lower() or name.lower() in t_lower:
+                return b
+
+        # 4. Fallback: first dynamic body
+        for b in self.named_bodies.values():
+            if b.body_type == pymunk.Body.DYNAMIC:
+                return b
+
+        return None
+
     def get_dynamic_telemetry(self) -> Dict[str, Any]:
-        """Evaluates model-defined variables live at 60 FPS."""
-        measured_items = []
+        """
+        Evaluates model-defined variables live at 60 FPS with robust type support
+        and automatic metric fallback if none are provided.
+        """
         g = abs(self.space.gravity[1]) / 100.0
         ground_y = self.height - 20.0
+        dynamic_bodies = {n: b for n, b in self.named_bodies.items() if b.body_type == pymunk.Body.DYNAMIC}
         
-        for metric in self.monitored_metrics:
+        # If no metrics were configured, automatically generate clean live telemetry for active bodies
+        active_metrics = self.monitored_metrics
+        if not active_metrics and dynamic_bodies:
+            active_metrics = []
+            for b_name in list(dynamic_bodies.keys())[:3]:
+                clean_name = b_name.replace("_", " ").title()
+                active_metrics.extend([
+                    {"id": f"v_{b_name}", "name": f"{clean_name} Velocity", "unit": "m/s", "type": "velocity", "target_body": b_name},
+                    {"id": f"h_{b_name}", "name": f"{clean_name} Height", "unit": "m", "type": "height", "target_body": b_name},
+                    {"id": f"ke_{b_name}", "name": f"{clean_name} Kinetic E.", "unit": "J", "type": "kinetic_energy", "target_body": b_name}
+                ])
+                if len(active_metrics) >= 4:
+                    break
+
+        measured_items = []
+        for metric in active_metrics:
             m_id = metric.get("id", "var")
             name = metric.get("name", m_id)
             unit = metric.get("unit", "")
-            m_type = metric.get("type", "constant")
+            m_type = str(metric.get("type", "constant")).lower()
             target = metric.get("target_body", "")
             val_display = "--"
 
-            if m_type == "constant":
+            body = self._resolve_body(target)
+
+            if m_type in ["constant", "param"]:
                 val = metric.get("value", 0.0)
                 val_display = f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
 
-            elif m_type == "velocity":
-                body = self.named_bodies.get(target)
+            elif m_type in ["velocity", "speed"]:
                 if body and body.body_type == pymunk.Body.DYNAMIC:
                     val_display = f"{(body.velocity.length / 100.0):.2f}"
 
-            elif m_type == "accel":
-                acc = self._current_accelerations.get(target, 0.0)
+            elif m_type in ["accel", "acceleration"]:
+                # Lookup acceleration of resolved body
+                acc = 0.0
+                if body:
+                    for bname, bobj in self.named_bodies.items():
+                        if bobj == body:
+                            acc = self._current_accelerations.get(bname, 0.0)
+                            break
                 val_display = f"{acc:.2f}"
 
-            elif m_type == "normal_force":
-                body = self.named_bodies.get(target)
-                angle_deg = metric.get("value", 30.0)
+            elif m_type in ["height", "altitude", "position_y"]:
+                if body:
+                    h_m = max(0.0, (ground_y - body.position.y) / 100.0)
+                    val_display = f"{h_m:.2f}"
+
+            elif m_type in ["kinetic_energy", "ke"]:
                 if body and body.body_type == pymunk.Body.DYNAMIC:
+                    v = body.velocity.length / 100.0
+                    ke = 0.5 * body.mass * (v ** 2)
+                    val_display = f"{ke:.2f}"
+
+            elif m_type in ["potential_energy", "pe"]:
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    h_m = max(0.0, (ground_y - body.position.y) / 100.0)
+                    pe = body.mass * g * h_m
+                    val_display = f"{pe:.2f}"
+
+            elif m_type in ["total_energy", "mechanical_energy"]:
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    v = body.velocity.length / 100.0
+                    h_m = max(0.0, (ground_y - body.position.y) / 100.0)
+                    tot = (0.5 * body.mass * (v ** 2)) + (body.mass * g * h_m)
+                    val_display = f"{tot:.2f}"
+
+            elif m_type in ["momentum"]:
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    p = body.mass * (body.velocity.length / 100.0)
+                    val_display = f"{p:.2f}"
+
+            elif m_type in ["normal_force"]:
+                if body and body.body_type == pymunk.Body.DYNAMIC:
+                    angle_deg = metric.get("value", 30.0)
                     fn = body.mass * g * math.cos(math.radians(angle_deg))
                     val_display = f"{fn:.2f}"
+
+            elif m_type in ["mass"]:
+                if body:
+                    val_display = f"{body.mass:.2f}"
 
             measured_items.append({
                 "id": m_id,
