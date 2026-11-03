@@ -153,10 +153,10 @@ class StatsPanel(ctk.CTkFrame):
         add_stat("Active Bodies", d.get("active_bodies", 0), "units")
 
         # Conclusion
-        conc_box = ctk.CTkFrame(self.report_container, fg_color="transparent")
-        conc_box.pack(fill="x", padx=6, pady=(2, 6))
-        ctk.CTkLabel(conc_box, text="Scientific Conclusion:", font=("SF Pro", 10, "bold"), text_color="#8b949e").pack(anchor="w")
-        ctk.CTkLabel(conc_box, text=d.get("conclusion", ""), font=("SF Pro", 10), text_color="#e6edf3", wraplength=700).pack(anchor="w")
+        conc_box = ctk.CTkFrame(self.report_container, fg_color="#13231e", border_width=1, border_color="#2fa572", corner_radius=6)
+        conc_box.pack(fill="x", padx=6, pady=(3, 6))
+        ctk.CTkLabel(conc_box, text="🎯 Verified Scientific Conclusion:", font=("SF Pro", 10, "bold"), text_color="#2fa572").pack(anchor="w", padx=8, pady=(4, 1))
+        ctk.CTkLabel(conc_box, text=d.get("conclusion", ""), font=("SF Pro", 10), text_color="#e6edf3", wraplength=700).pack(anchor="w", padx=8, pady=(0, 6))
 
     def _rebuild_cards(self, metric_items: List[Dict[str, Any]]):
         """Reconstructs dynamic cards using pack(side='left')."""

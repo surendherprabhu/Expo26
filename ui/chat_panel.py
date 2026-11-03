@@ -1,6 +1,6 @@
 """
-Chat Panel Module for Universal AI Simulation Environment.
-40% left pane: Displays conversation history, status, user prompt input, and send actions.
+Chat Panel Module for Universal AI Simulation Environment (SDG 9).
+40% left pane: Clean experiment protocol log, user prompt input, and send action.
 """
 
 import threading
@@ -18,33 +18,32 @@ class ChatPanel(ctk.CTkFrame):
         self._build_input_bar()
 
     def _build_top_bar(self):
-        """Top bar: Connection status indicator & quick reset button."""
+        """Clean header without redundant online status (handled in top window bar)."""
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.pack(fill="x", padx=12, pady=(10, 6))
         
-        self.status_label = ctk.CTkLabel(
+        title_lbl = ctk.CTkLabel(
             top_frame,
-            text="Online 🌐",
-            font=("SF Pro", 12, "bold"),
-            text_color="#2fa572"
+            text="💬 EXPERIMENT LOG & PROTOCOL",
+            font=("SF Pro", 11, "bold"),
+            text_color="#8b949e"
         )
-        self.status_label.pack(side="left")
+        title_lbl.pack(side="left")
         
-        self.reset_btn = ctk.CTkButton(
+        self.clear_btn = ctk.CTkButton(
             top_frame,
-            text="↺ Clear World",
-            font=("SF Pro", 11),
-            fg_color="#2b313e",
+            text="↺ Clear",
+            font=("SF Pro", 10),
+            fg_color="#1c212d",
             hover_color="#3d4455",
-            width=90,
-            height=26,
-            corner_radius=6,
+            width=65,
+            height=24,
+            corner_radius=5,
             command=self.on_reset_world
         )
-        self.reset_btn.pack(side="right")
+        self.clear_btn.pack(side="right")
 
     def _build_chat_display(self):
-        """Scrollable chat history with word wrapping."""
         self.chat_box = ctk.CTkTextbox(
             self,
             wrap="word",
@@ -58,16 +57,14 @@ class ChatPanel(ctk.CTkFrame):
         )
         self.chat_box.pack(fill="both", expand=True, padx=12, pady=4)
         
-        # Welcome message
         self.append_message(
             "System",
-            "Universal AI Simulation Lab initialized.\n"
-            "Ask me to construct physical mechanisms, structural trusses, collision experiments, or inclined planes conversationally.\n"
-            "Interactive physics: Click, drag, and fling any object in the viewport with your mouse."
+            "Universal AI Simulation Lab ready.\n"
+            "Describe any physical experiment (e.g. Galileo's drop, friction on a wedge, skid braking, or elastic collisions).\n"
+            "Apparatus will construct in an enclosed chamber and freeze at t=0.0s ready for release."
         )
 
     def _build_input_bar(self):
-        """Bottom user input and green send button matching user's R.A.P.H.A.E.L styling."""
         input_frame = ctk.CTkFrame(self, fg_color="transparent")
         input_frame.pack(fill="x", padx=12, pady=(6, 12))
 
@@ -115,10 +112,7 @@ class ChatPanel(ctk.CTkFrame):
         threading.Thread(target=run, daemon=True).start()
 
     def set_online_status(self, is_online: bool):
-        if is_online:
-            self.status_label.configure(text="Online 🌐", text_color="#2fa572")
-        else:
-            self.status_label.configure(text="Offline 🔌", text_color="#8b949e")
+        pass
 
     def append_message(self, sender: str, text: str, actions: Optional[list] = None):
         self.chat_box.configure(state="normal")

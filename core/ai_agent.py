@@ -1,7 +1,7 @@
 """
-AI Agent Module for Universal AI Simulation Environment.
-Connects directly to LLM with structured tools for scientific experimentation.
-Enforces concise engineering reporting (no chatbot essays) and pauses apparatus at t=0.0s.
+AI Agent Module for Universal AI Simulation Environment (SDG 9).
+Connects to LLM with robust tool calling, conversational history pruning,
+safe argument fallbacks, and anti-hallucination guards.
 """
 
 import json
@@ -18,10 +18,10 @@ SIMULATION_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "Unique identifier (e.g. 'wedge_30')."},
+                    "name": {"type": "string", "description": "Unique identifier (e.g. 'wedge_35')."},
                     "x_left": {"type": "number", "description": "Left base coordinate (e.g. 80)."},
                     "x_right": {"type": "number", "description": "Right base coordinate (e.g. 520)."},
-                    "height": {"type": "number", "description": "Height in pixels. For 30°: (x_right - x_left) * 0.577. For 45°: (x_right - x_left)."},
+                    "height": {"type": "number", "description": "Height in pixels."},
                     "friction": {"type": "number", "description": "Surface friction coefficient (0.0 to 1.0)."},
                     "elasticity": {"type": "number", "description": "Bounciness (0.0 to 1.0)."}
                 },
@@ -33,15 +33,15 @@ SIMULATION_TOOLS = [
         "type": "function",
         "function": {
             "name": "create_box",
-            "description": "Creates a rectangular rigid body (e.g. wooden block, slider).",
+            "description": "Creates a rectangular rigid body (e.g. wooden block, crate, freight block).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Unique identifier."},
-                    "x": {"type": "number", "description": "X coordinate."},
-                    "y": {"type": "number", "description": "Y coordinate."},
-                    "width": {"type": "number", "description": "Width in pixels."},
-                    "height": {"type": "number", "description": "Height in pixels."},
+                    "x": {"type": "number", "description": "X coordinate (0 to 740)."},
+                    "y": {"type": "number", "description": "Y coordinate. If on the floor, use y=430."},
+                    "width": {"type": "number", "description": "Width in pixels (e.g. 45)."},
+                    "height": {"type": "number", "description": "Height in pixels (e.g. 35)."},
                     "mass": {"type": "number", "description": "Mass in kg."},
                     "elasticity": {"type": "number", "description": "Elasticity (0.0 to 1.0)."},
                     "friction": {"type": "number", "description": "Friction coefficient (0.0 to 1.0)."},
@@ -56,7 +56,7 @@ SIMULATION_TOOLS = [
                         "description": "[R, G, B] color (0-255)."
                     }
                 },
-                "required": ["name", "width", "height"]
+                "required": ["name"]
             }
         }
     },
@@ -64,16 +64,16 @@ SIMULATION_TOOLS = [
         "type": "function",
         "function": {
             "name": "create_circle",
-            "description": "Creates a circular rigid body (e.g. sphere, pendulum bob, wheel).",
+            "description": "Creates a circular rigid body (e.g. sphere, rubber ball, pendulum bob).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Unique identifier."},
-                    "x": {"type": "number", "description": "Center X."},
-                    "y": {"type": "number", "description": "Center Y."},
-                    "radius": {"type": "number", "description": "Radius in pixels."},
+                    "x": {"type": "number", "description": "Center X coordinate."},
+                    "y": {"type": "number", "description": "Center Y coordinate."},
+                    "radius": {"type": "number", "description": "Radius in pixels (e.g. 20)."},
                     "mass": {"type": "number", "description": "Mass in kg."},
-                    "elasticity": {"type": "number", "description": "Elasticity (0.0 to 1.0)."},
+                    "elasticity": {"type": "number", "description": "Elasticity / Bounciness (0.0 to 1.0)."},
                     "friction": {"type": "number", "description": "Friction coefficient."},
                     "static": {"type": "boolean", "description": "If true, circle is immovable."},
                     "on_wedge": {
@@ -86,7 +86,7 @@ SIMULATION_TOOLS = [
                         "description": "[R, G, B] color."
                     }
                 },
-                "required": ["name", "radius"]
+                "required": ["name"]
             }
         }
     },
@@ -141,13 +141,9 @@ SIMULATION_TOOLS = [
                                 "unit": {"type": "string"},
                                 "type": {
                                     "type": "string",
-                                    "enum": ["velocity", "accel", "height", "kinetic_energy", "potential_energy", "total_energy", "momentum", "normal_force", "constant"],
-                                    "description": "Measurement type: 'velocity' (m/s), 'accel' (m/s²), 'height' (m above ground), 'kinetic_energy' (J), 'momentum' (kg·m/s), 'constant' (fixed value)."
+                                    "enum": ["velocity", "accel", "height", "kinetic_energy", "potential_energy", "total_energy", "momentum", "normal_force", "constant"]
                                 },
-                                "target_body": {
-                                    "type": "string",
-                                    "description": "Name of the target body to measure (e.g. 'heavy_sphere')."
-                                },
+                                "target_body": {"type": "string"},
                                 "value": {"type": "number"}
                             },
                             "required": ["id", "name", "unit", "type"]
@@ -172,22 +168,16 @@ SIMULATION_TOOLS = [
 ]
 
 SYSTEM_PROMPT = """You are the AI Scientific Experimentation Controller for an interactive physics simulation lab (SDG 9).
-Canvas: 760 px wide, 480 px high. Ground floor is at y = 460. Standard gravity: (0, 900).
+Canvas: enclosed chamber 760 px wide by 480 px high. Floor is at the bottom (y ≈ 440). Standard gravity: (0, 900).
 
-CRITICAL INSTRUCTIONS:
-1. When asked to simulate an inclined plane, use `create_wedge` (solid triangle resting on floor), and place the sliding block using `on_wedge="<wedge_name>"`.
-2. ALWAYS call `set_experiment_metrics` to track 2-5 relevant physical quantities.
-   - For free fall / drops: track 'velocity', 'height', 'kinetic_energy' with target_body set to the created body names.
-   - For inclined planes: track angle θ (constant), friction μ (constant), velocity, acceleration, normal_force.
-   - For collisions: track velocities (v1, v2), momentum, kinetic energy.
-   - Set `target_body` to the exact name of the body you created.
-3. CONVERSATIONAL STYLE:
-   - DO NOT write multi-paragraph textbook essays.
-   - DO NOT output ASCII art or long equation derivations.
-   - Format response strictly as a concise 3-line Experiment Protocol:
-     • Setup: [Summary of mass, geometry, and friction]
-     • Theoretical Benchmark: [Formula and expected theoretical value, e.g. a_theor = 1.93 m/s²]
-     • Status: Apparatus frozen at t=0.0s. Click Release to run experiment.
+CRITICAL OPERATIONAL RULES:
+1. ALWAYS CALL TOOLS: You MUST call the appropriate tools (create_box, create_circle, create_wedge, apply_force, set_experiment_metrics) to execute the simulation. NEVER output text saying "Let me create..." or "The user is asking me..." without invoking tools!
+2. Ramps / Wedges: Always use `create_wedge` for inclined planes and pass `on_wedge="<wedge_name>"` when placing the sliding body.
+3. Floor Coordinates: When placing a crate or ball on the floor, place it at y = 430.
+4. Experiment Protocol Output: Format your assistant text strictly as a clean 3-line report:
+   • Setup: [Summary of components, mass, and parameters]
+   • Theoretical Benchmark: [Formula and expected theoretical value]
+   • Status: Apparatus frozen at t=0.0s. Click Release to run experiment.
 """
 
 class AIAgent:
@@ -219,7 +209,7 @@ class AIAgent:
                     kwargs["base_url"] = self.base_url.strip()
                 self.client = OpenAI(**kwargs)
             except Exception as e:
-                print(f"Error initializing OpenAI client: {e}")
+                print(f"Error initializing client: {e}")
                 self.client = None
         else:
             self.client = None
@@ -229,46 +219,47 @@ class AIAgent:
         return self.client is not None and bool(self.api_key)
 
     def execute_tool_call(self, function_name: str, args: Dict[str, Any]) -> str:
-        """Executes a parsed tool call against the Pymunk physics engine."""
+        """Executes tool call with safe defaults to prevent KeyErrors."""
         try:
             if function_name == "create_wedge":
                 name = args.get("name", "incline_wedge")
                 x_left = float(args.get("x_left", 80))
                 x_right = float(args.get("x_right", 500))
                 height = float(args.get("height", 220))
-                f = float(args.get("friction", 0.5))
+                f = float(args.get("friction", 0.35))
                 e = float(args.get("elasticity", 0.2))
                 self.engine.add_wedge(name, x_left, x_right, height, f, e)
                 return f"Constructed solid wedge '{name}' (base {x_left} to {x_right}, height {height}px, μ={f})"
 
             elif function_name == "create_box":
                 name = args.get("name", f"box_{len(self.engine.named_bodies)}")
-                x = float(args.get("x", 200))
-                y = float(args.get("y", 200))
-                w = float(args["width"])
-                h = float(args["height"])
+                floor_y = self.engine.height - 35.0
+                x = float(args.get("x", 120))
+                y = float(args.get("y", floor_y))
+                w = float(args.get("width", 50))
+                h = float(args.get("height", 40))
                 m = float(args.get("mass", 5.0))
                 e = float(args.get("elasticity", 0.2))
                 f = float(args.get("friction", 0.5))
                 s = bool(args.get("static", False))
                 on_wedge = args.get("on_wedge")
-                color = tuple(args.get("color_rgb", [46, 204, 113]))
+                color = tuple(args.get("color_rgb", [217, 119, 6]))
                 self.engine.add_box(name, x, y, w, h, m, e, f, s, color, on_wedge=on_wedge)
-                return f"Placed box '{name}' (mass {m}kg, μ={f})" + (f" on {on_wedge}" if on_wedge else "")
+                return f"Placed box '{name}' ({w}x{h}px, mass {m}kg, μ={f})" + (f" on {on_wedge}" if on_wedge else "")
 
             elif function_name == "create_circle":
                 name = args.get("name", f"circle_{len(self.engine.named_bodies)}")
-                x = float(args.get("x", 200))
-                y = float(args.get("y", 200))
-                r = float(args["radius"])
+                x = float(args.get("x", 380))
+                y = float(args.get("y", 100))
+                r = float(args.get("radius", 22))
                 m = float(args.get("mass", 3.0))
                 e = float(args.get("elasticity", 0.8))
                 f = float(args.get("friction", 0.2))
                 s = bool(args.get("static", False))
                 on_wedge = args.get("on_wedge")
-                color = tuple(args.get("color_rgb", [52, 152, 219]))
+                color = tuple(args.get("color_rgb", [37, 99, 235]))
                 self.engine.add_circle(name, x, y, r, m, e, f, s, color, on_wedge=on_wedge)
-                return f"Placed sphere '{name}' (mass {m}kg)" + (f" on {on_wedge}" if on_wedge else "")
+                return f"Placed sphere '{name}' (radius {r}px, mass {m}kg, e={e})" + (f" on {on_wedge}" if on_wedge else "")
 
             elif function_name == "create_joint":
                 name = args.get("name", f"joint_{len(self.engine.named_joints)}")
@@ -279,8 +270,8 @@ class AIAgent:
 
             elif function_name == "apply_force":
                 bname = args["body_name"]
-                fx = float(args["impulse_x"])
-                fy = float(args["impulse_y"])
+                fx = float(args.get("impulse_x", 0))
+                fy = float(args.get("impulse_y", 0))
                 self.engine.apply_impulse(bname, (fx, fy))
                 return f"Applied impulse ({fx}, {fy}) to '{bname}'"
 
@@ -298,27 +289,46 @@ class AIAgent:
             return f"Error executing {function_name}: {e}"
 
     def process_message(self, user_text: str) -> Tuple[str, List[str]]:
-        """Processes user instructions, sets up the experiment, and pauses at t=0."""
+        """Processes user instructions cleanly without conversational stalling."""
         if not self.is_online:
             return (
                 "⚠️ API Not Configured.\n\n"
-                "Please click '⚙ Settings' at the bottom-left to set your OpenAI key or local Ollama URL.",
+                "Please click '⚙ Settings & Presets' to configure your OpenAI key or local Ollama URL.",
                 []
             )
 
         actions_taken = []
-        self.conversation_history.append({"role": "user", "content": user_text})
+        
+        # When user requests an experiment, reset the apparatus so old bodies don't linger
+        t_low = user_text.lower()
+        is_experiment_cmd = any(k in t_low for k in [
+            "simulate", "drop", "place", "build", "create", "construct",
+            "launch", "wedge", "ramp", "ball", "box", "crate", "incline",
+            "sphere", "pendulum", "collision", "elastic", "bounce", "skid", "braking"
+        ])
+        if is_experiment_cmd:
+            self.engine.reset()
+
+        # Prune conversation history to fresh turn to avoid local model repetition / stalling
+        self.conversation_history = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_text}
+        ]
+        
+        # Force tool calling for experiment setup so local models never chat instead of building
+        tool_choice_mode = "required" if is_experiment_cmd else "auto"
         
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.conversation_history,
                 tools=SIMULATION_TOOLS,
-                tool_choice="auto",
-                temperature=0.2
+                tool_choice=tool_choice_mode,
+                temperature=0.1
             )
             msg = response.choices[0].message
             
+            # If the model called tools, execute them
             if msg.tool_calls:
                 self.conversation_history.append(msg)
                 
@@ -335,37 +345,47 @@ class AIAgent:
                         "content": result_msg
                     })
                 
-                # Freeze apparatus at t=0 and save initial snapshot
+                # Freeze apparatus at t=0
                 self.engine.capture_initial_snapshot()
                 
-                # Request crisp engineering protocol
-                second_response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=self.conversation_history,
-                    temperature=0.3
-                )
-                
-                explanation = second_response.choices[0].message.content or ""
-                if not explanation.strip():
-                    reasoning = getattr(second_response.choices[0].message, "reasoning", "")
-                    if reasoning:
-                        paragraphs = [p.strip() for p in reasoning.strip().split("\n\n") if p.strip()]
-                        explanation = paragraphs[-1] if paragraphs else "Apparatus configured."
-                    else:
-                        explanation = "Apparatus ready and frozen at t=0.0s."
-                
-                self.conversation_history.append({"role": "assistant", "content": explanation})
-                return explanation, actions_taken
-            else:
+                # Generate clean engineering protocol
                 explanation = msg.content or ""
                 if not explanation.strip():
                     reasoning = getattr(msg, "reasoning", "")
                     if reasoning:
                         paragraphs = [p.strip() for p in reasoning.strip().split("\n\n") if p.strip()]
-                        explanation = paragraphs[-1] if paragraphs else "Acknowledged."
-                    else:
-                        explanation = "Acknowledged."
-                self.conversation_history.append({"role": "assistant", "content": explanation})
+                        explanation = paragraphs[-1] if paragraphs else ""
+                
+                # If local model or no content, generate instant crisp protocol without slow 2nd roundtrip
+                if not explanation.strip():
+                    explanation = (
+                        f"• Setup: Configured {len(actions_taken)} physical components in enclosed chamber.\n"
+                        f"• Status: Apparatus frozen at t=0.0s. Click 'Release / Run' to execute experiment."
+                    )
+                
+                return explanation, actions_taken
+
+            else:
+                # If model produced text instead of tool calls, check for embedded tool JSON
+                import re
+                json_matches = re.findall(r'\{[^{}]*"name"\s*:\s*"(?:create|apply|set)[^}]+\}', msg.content or "")
+                for jm in json_matches:
+                    try:
+                        call_obj = json.loads(jm)
+                        fn = call_obj.get("name")
+                        args = call_obj.get("arguments", call_obj.get("parameters", {}))
+                        if fn:
+                            res = self.execute_tool_call(fn, args)
+                            actions_taken.append(res)
+                    except Exception:
+                        pass
+
+                if actions_taken:
+                    self.engine.capture_initial_snapshot()
+                    explanation = "• Setup: Configured physical apparatus.\n• Status: Frozen at t=0.0s. Ready for release."
+                    return explanation, actions_taken
+
+                explanation = msg.content or "Apparatus configured."
                 return explanation, actions_taken
 
         except RateLimitError:

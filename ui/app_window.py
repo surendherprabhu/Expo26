@@ -1,14 +1,12 @@
 """
 Main Application Window for Universal AI Simulation Environment (SDG 9).
 Integrates:
-- 40:60 Split CustomTkinter interface
-- Pymunk 2D physics engine with solid triangular wedges
-- Experiment Freeze at t=0.0s with explicit [▶ Release / Run] control
-- Light modern laboratory canvas aesthetic with theme toggle (☀️ Light Lab / 🌙 Dark Mode)
-- 1-Click quick Demo Presets dropdown for fast live demonstrations
-- Toggleable Mouse Grab interaction switch
-- Dynamic telemetry & Formal Experiment Control Sheet / Report
-- Settings menu with full Preset Experiments library
+- Enclosed 4-wall laboratory viewport with dynamic boundary synchronization
+- Clean Light Lab canvas with dark mode toggle
+- Center-of-mass mouse physics (zero unwanted torque spinning)
+- Smoothed telemetry (zero -0.00 jitter)
+- Clean, decluttered CustomTkinter interface
+- Automated scientific conclusion generator
 """
 
 import time
@@ -41,11 +39,11 @@ class AppWindow:
         pos_x = max(0, int((screen_w - win_w) / 2))
         pos_y = max(0, int((screen_h - win_h) / 2))
         self.root.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
-        self.root.minsize(1050, 700)
+        self.root.minsize(1050, 680)
 
         self.config = load_config()
         
-        # Initialize Core Engines with clean light lab rendering by default
+        # Initialize Core Engines with enclosed chamber
         self.physics = PhysicsEngine(width=760, height=480)
         self.renderer = PhysicsRenderer(self.physics, width=760, height=480)
         self.renderer.set_theme("light")
@@ -57,7 +55,6 @@ class AppWindow:
             base_url=self.config.get("base_url", "")
         )
 
-        # Build UI layout
         self._build_header()
         self._build_main_split()
         self._build_footer()
@@ -75,7 +72,7 @@ class AppWindow:
         self._tick_simulation()
 
     def _build_header(self):
-        self.header_frame = ctk.CTkFrame(self.root, height=48, fg_color="#0e1117", corner_radius=0)
+        self.header_frame = ctk.CTkFrame(self.root, height=44, fg_color="#0e1117", corner_radius=0)
         self.header_frame.pack(fill="x", side="top")
         self.header_frame.pack_propagate(False)
 
@@ -85,7 +82,7 @@ class AppWindow:
         title_lbl = ctk.CTkLabel(
             title_box,
             text=f"⚛ {APPLICATION_NAME}",
-            font=("SF Pro", 14, "bold"),
+            font=("SF Pro", 13, "bold"),
             text_color="#ffffff"
         )
         title_lbl.pack(side="left", padx=(0, 10))
@@ -93,7 +90,7 @@ class AppWindow:
         sdg_badge = ctk.CTkLabel(
             title_box,
             text="SDG 9 / 7 / 12",
-            font=("SF Pro", 10, "bold"),
+            font=("SF Pro", 9, "bold"),
             fg_color="#1f2937",
             text_color="#2fa572",
             corner_radius=4,
@@ -105,14 +102,14 @@ class AppWindow:
         self.conn_label = ctk.CTkLabel(
             self.header_frame,
             text="Online 🌐" if self.ai_agent.is_online else "Offline 🔌",
-            font=("SF Pro", 12, "bold"),
+            font=("SF Pro", 11, "bold"),
             text_color="#2fa572" if self.ai_agent.is_online else "#8b949e"
         )
         self.conn_label.pack(side="right", padx=16)
 
     def _build_main_split(self):
         self.main_container = ctk.CTkFrame(self.root, fg_color="transparent")
-        self.main_container.pack(fill="both", expand=True, padx=12, pady=10)
+        self.main_container.pack(fill="both", expand=True, padx=12, pady=8)
 
         # 40% Left Pane: Chat
         self.left_pane = ChatPanel(
@@ -121,13 +118,12 @@ class AppWindow:
             on_reset_world=self._handle_reset_world
         )
         self.left_pane.place(relx=0.0, rely=0.0, relwidth=0.38, relheight=1.0)
-        self.left_pane.set_online_status(self.ai_agent.is_online)
 
         # 60% Right Pane: Viewport + Telemetry/Report
         self.right_container = ctk.CTkFrame(self.main_container, fg_color="transparent")
         self.right_container.place(relx=0.39, rely=0.0, relwidth=0.61, relheight=1.0)
 
-        # Viewport Frame (Upper ~75%)
+        # Viewport Frame (Upper ~74%)
         self.viewport_frame = ctk.CTkFrame(
             self.right_container,
             corner_radius=12,
@@ -137,24 +133,17 @@ class AppWindow:
         )
         self.viewport_frame.place(relx=0.0, rely=0.0, relwidth=1.0, relheight=0.74)
 
-        # Canvas Header Controls
-        cv_header = ctk.CTkFrame(self.viewport_frame, fg_color="transparent", height=34)
+        # Header Controls
+        cv_header = ctk.CTkFrame(self.viewport_frame, fg_color="transparent", height=32)
         cv_header.pack(fill="x", padx=10, pady=(6, 0))
         cv_header.pack_propagate(False)
 
         # Quick Demo Presets Dropdown
-        ctk.CTkLabel(
-            cv_header,
-            text="🔬 Demo:",
-            font=("SF Pro", 10, "bold"),
-            text_color="#8b949e"
-        ).pack(side="left", padx=(0, 4))
-
         self.preset_combo = ctk.CTkComboBox(
             cv_header,
             values=[p["title"] for p in PRESET_EXPERIMENTS],
             command=self._on_quick_preset_select,
-            width=180,
+            width=200,
             height=24,
             font=("SF Pro", 9),
             dropdown_font=("SF Pro", 10),
@@ -162,10 +151,10 @@ class AppWindow:
             button_color="#2fa572",
             border_color="#262c3d"
         )
-        self.preset_combo.pack(side="left", padx=(0, 8))
+        self.preset_combo.pack(side="left", padx=(0, 6))
         self.preset_combo.set("Choose Demo Preset...")
 
-        # Canvas Theme Toggle (Light Lab / Dark Mode)
+        # Theme Toggle
         self.theme_btn = ctk.CTkButton(
             cv_header,
             text="☀️ Light Lab",
@@ -178,7 +167,7 @@ class AppWindow:
         )
         self.theme_btn.pack(side="left", padx=2)
 
-        # Mouse Grab Toggle Switch
+        # Mouse Grab Toggle
         self.mouse_switch = ctk.CTkSwitch(
             cv_header,
             text="Grab",
@@ -187,7 +176,7 @@ class AppWindow:
             width=36,
             command=self._on_toggle_mouse
         )
-        self.mouse_switch.pack(side="left", padx=(8, 0))
+        self.mouse_switch.pack(side="left", padx=(6, 0))
         self.mouse_switch.select()
 
         # Primary Release / Run button
@@ -203,14 +192,14 @@ class AppWindow:
         )
         self.run_btn.pack(side="right", padx=2)
 
-        # Reset to t=0 button
+        # Clean Reset (t=0) button
         self.reset_t0_btn = ctk.CTkButton(
             cv_header,
             text="↺ Reset",
             font=("SF Pro", 9),
             fg_color="#1c212d",
             hover_color="#3d4455",
-            width=60,
+            width=55,
             height=24,
             command=self._reset_to_t0
         )
@@ -229,7 +218,7 @@ class AppWindow:
         )
         self.end_exp_btn.pack(side="right", padx=2)
 
-        # Tkinter Canvas (Light Laboratory aesthetic by default)
+        # Tkinter Canvas
         self.canvas = tk.Canvas(
             self.viewport_frame,
             bg="#f8fafc",
@@ -248,40 +237,32 @@ class AppWindow:
         self.stats_panel.place(relx=0.0, rely=0.76, relwidth=1.0, relheight=0.24)
 
     def _build_footer(self):
-        self.footer_frame = ctk.CTkFrame(self.root, height=36, fg_color="#0e1117", corner_radius=0)
+        self.footer_frame = ctk.CTkFrame(self.root, height=32, fg_color="#0e1117", corner_radius=0)
         self.footer_frame.pack(fill="x", side="bottom")
         self.footer_frame.pack_propagate(False)
 
         self.settings_btn = ctk.CTkButton(
             self.footer_frame,
             text="⚙ Settings & Presets",
-            font=("SF Pro", 11),
+            font=("SF Pro", 10),
             fg_color="#2fa572",
             hover_color="#106a43",
-            width=140,
-            height=24,
-            corner_radius=6,
+            width=130,
+            height=22,
+            corner_radius=5,
             command=self._open_settings
         )
         self.settings_btn.pack(side="left", padx=16)
 
-        ctk.CTkLabel(
-            self.footer_frame,
-            text="Click '▶ Release / Run' to start motion. Select any demo preset above for 1-click loading.",
-            font=("SF Pro", 10),
-            text_color="#6e7681"
-        ).pack(side="left", padx=10)
-
         self.model_label = ctk.CTkLabel(
             self.footer_frame,
             text=f"Model: {self.ai_agent.model}",
-            font=("SF Pro", 11),
+            font=("SF Pro", 10),
             text_color="#8b949e"
         )
         self.model_label.pack(side="right", padx=16)
 
     def _toggle_theme(self):
-        """Toggles rendering canvas between light laboratory aesthetic and dark mode."""
         if self.renderer.theme == "light":
             self.renderer.set_theme("dark")
             self.canvas.configure(bg="#0d1117")
@@ -323,22 +304,31 @@ class AppWindow:
             self.stats_panel.show_telemetry_view()
 
     def _reset_to_t0(self):
+        self.renderer.release_mouse()
         self.physics.reset_to_initial_state()
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
         self.stats_panel.show_telemetry_view()
         self.left_pane.append_message("System", "Apparatus reset to initial state (t = 0.00s). Ready for release.")
 
     def _on_end_experiment(self):
+        self.renderer.release_mouse()
         self.physics.paused = True
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
         report = self.physics.generate_experiment_report()
         self.stats_panel.set_report_data(report)
-        self.left_pane.append_message("System", f"Experiment ended. Control sheet generated for '{report.get('title')}'.")
+        
+        # Post definite conclusion statement to the chat log
+        self.left_pane.append_message(
+            "System",
+            f"🎯 EXPERIMENT CONCLUSION:\n{report.get('conclusion')}\n\n"
+            f"• Duration: {report.get('duration_sec')}s | Peak Velocity: {report.get('peak_velocity_mps')} m/s | Avg Velocity: {report.get('avg_velocity_mps')} m/s"
+        )
 
     def _handle_reset_world(self):
+        self.renderer.release_mouse()
         self.physics.reset()
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
-        self.preset_combo.set("Choose Demo Preset...")
+        self.preset_combo.set("Choose Preset...")
         self.left_pane.append_message("System", "World cleared.")
 
     def _handle_user_message(self, text: str):
@@ -346,6 +336,7 @@ class AppWindow:
         self.root.after(0, lambda: self._on_message_finished(explanation, actions))
 
     def _on_message_finished(self, explanation: str, actions: list):
+        self.renderer.release_mouse()
         self.left_pane.append_message("AI Agent", explanation, actions)
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
         self.stats_panel.show_telemetry_view()
@@ -363,9 +354,9 @@ class AppWindow:
             text="Online 🌐" if is_on else "Offline 🔌",
             text_color="#2fa572" if is_on else "#8b949e"
         )
-        self.left_pane.set_online_status(is_on)
 
     def _on_load_preset(self, preset_id: str):
+        self.renderer.release_mouse()
         preset = load_preset_by_id(self.physics, preset_id)
         self.run_btn.configure(text="▶ Release / Run", fg_color="#2fa572")
         self.preset_combo.set(preset["title"])
@@ -373,7 +364,7 @@ class AppWindow:
         
         self.left_pane.append_message(
             "System",
-            f"🧪 Loaded Preset: {preset['title']}\n"
+            f"🧪 Loaded: {preset['title']}\n"
             f"• Aim: {preset['aim']}\n"
             f"• Theoretical Benchmark: {preset['theoretical_benchmark']}\n"
             f"• Status: Apparatus frozen at t=0.00s. Click 'Release / Run' to begin."
