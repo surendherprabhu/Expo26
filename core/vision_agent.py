@@ -32,18 +32,21 @@ IMAGE_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(_
 os.makedirs(IMAGE_CACHE_DIR, exist_ok=True)
 
 class VisionAgent:
-    def __init__(self, provider: str = "openai", api_key: str = "", gemini_key: str = ""):
+    def __init__(self, provider: str = "openai", api_key: str = "", gemini_key: str = "", base_url: str = ""):
         self.provider = provider.lower()
         self.api_key = api_key.strip()
         self.gemini_key = gemini_key.strip()
+        self.base_url = base_url.strip()
         self._init_clients()
 
-    def set_credentials(self, provider: str, api_key: str = "", gemini_key: str = ""):
+    def set_credentials(self, provider: str, api_key: str = "", gemini_key: str = "", base_url: str = ""):
         self.provider = provider.lower()
         if api_key:
             self.api_key = api_key.strip()
         if gemini_key:
             self.gemini_key = gemini_key.strip()
+        if base_url:
+            self.base_url = base_url.strip()
         self._init_clients()
 
     def _init_clients(self):
@@ -52,7 +55,10 @@ class VisionAgent:
         
         if OpenAI and self.api_key:
             try:
-                self.openai_client = OpenAI(api_key=self.api_key)
+                kwargs = {"api_key": self.api_key}
+                if self.base_url:
+                    kwargs["base_url"] = self.base_url
+                self.openai_client = OpenAI(**kwargs)
             except Exception:
                 pass
                 

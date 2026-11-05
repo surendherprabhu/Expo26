@@ -80,7 +80,7 @@ class ResearchAgent:
         self.gemini_key = (gemini_key or os.environ.get("GEMINI_API_KEY", "")).strip()
         
         provider = "gemini" if "gemini" in model.lower() else "openai"
-        self.vision_agent = VisionAgent(provider=provider, api_key=self.api_key, gemini_key=self.gemini_key)
+        self.vision_agent = VisionAgent(provider=provider, api_key=self.api_key, gemini_key=self.gemini_key, base_url=self.base_url)
         self.conversation_history: List[Dict[str, Any]] = [
             {"role": "system", "content": RESEARCH_SYSTEM_PROMPT}
         ]
@@ -94,7 +94,7 @@ class ResearchAgent:
             self.gemini_key = gemini_key.strip()
             
         provider = "gemini" if "gemini" in self.model.lower() else "openai"
-        self.vision_agent.set_credentials(provider, self.api_key, self.gemini_key)
+        self.vision_agent.set_credentials(provider, self.api_key, self.gemini_key, base_url=self.base_url)
         self._init_clients()
 
     def _init_clients(self):
@@ -215,19 +215,29 @@ class ResearchAgent:
         if self.gemini_client and "gemini" in self.model.lower():
             try:
                 model_name = self.model if "gemini" in self.model else "gemini-2.0-flash"
+                history_turns = [m for m in self.conversation_history if m.get("role") != "system"]
+                contents = [RESEARCH_SYSTEM_PROMPT]
+                for turn in history_turns[-6:]:
+                    contents.append(f"{turn['role'].upper()}: {turn['content']}")
+                contents.append(f"USER: {prompt_text}")
                 res = self.gemini_client.models.generate_content(
                     model=model_name,
-                    contents=[RESEARCH_SYSTEM_PROMPT, prompt_text]
+                    contents=contents
                 )
-                return res.text or "Analysis completed."
+                reply = res.text or "Analysis completed."
+                self.conversation_history.append({"role": "user", "content": prompt_text})
+                self.conversation_history.append({"role": "assistant", "content": reply})
+                return reply
             except Exception as e:
                 print(f"Gemini call error: {e}")
 
         # 2. Try OpenAI / Ollama client
         if self.openai_client:
             try:
+                history_turns = [m for m in self.conversation_history if m.get("role") != "system"]
                 messages = [
                     {"role": "system", "content": RESEARCH_SYSTEM_PROMPT},
+                    *history_turns[-8:],
                     {"role": "user", "content": prompt_text}
                 ]
                 resp = self.openai_client.chat.completions.create(
@@ -235,7 +245,17 @@ class ResearchAgent:
                     messages=messages,
                     temperature=0.2
                 )
-                return resp.choices[0].message.content or "Analysis completed."
+                msg = resp.choices[0].message
+                content = (msg.content or "").strip()
+                if not content and hasattr(msg, "reasoning") and msg.reasoning:
+                    content = msg.reasoning.strip()
+                elif not content and hasattr(msg, "reasoning_content") and msg.reasoning_content:
+                    content = msg.reasoning_content.strip()
+
+                reply = content or "Analysis completed."
+                self.conversation_history.append({"role": "user", "content": prompt_text})
+                self.conversation_history.append({"role": "assistant", "content": reply})
+                return reply
             except Exception as e:
                 return f"⚠️ API Error ({type(e).__name__}): {e}"
 

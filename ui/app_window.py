@@ -181,7 +181,8 @@ class AppWindow:
         self.research_container = ResearchPanel(
             self.root,
             research_agent=self.research_agent,
-            get_physics_report_callback=self.physics.generate_experiment_report
+            get_physics_report_callback=self.physics.generate_experiment_report,
+            on_model_change_callback=self._on_model_changed_from_research
         )
 
         # Viewport Frame (Upper ~74%)
@@ -410,8 +411,20 @@ class AppWindow:
         self.ai_agent.set_model(new_model)
         self.research_agent.set_credentials(new_key, new_model, new_url, gemini_key=new_gemini_key)
         self.model_label.configure(text=f"Model: {new_model}")
+        self.research_container.update_model_display(new_model)
         
         is_on = self.ai_agent.is_online or bool(new_gemini_key)
+        self.conn_label.configure(
+            text="Online 🌐" if is_on else "Offline 🔌",
+            text_color="#2fa572" if is_on else "#8b949e"
+        )
+
+    def _on_model_changed_from_research(self, new_model: str):
+        cfg = load_config()
+        self.ai_agent.set_api_key(cfg.get("api_key", ""), cfg.get("base_url", ""), gemini_key=cfg.get("gemini_key", ""))
+        self.ai_agent.set_model(new_model)
+        self.model_label.configure(text=f"Model: {new_model}")
+        is_on = self.ai_agent.is_online or bool(cfg.get("gemini_key"))
         self.conn_label.configure(
             text="Online 🌐" if is_on else "Offline 🔌",
             text_color="#2fa572" if is_on else "#8b949e"

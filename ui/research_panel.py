@@ -24,10 +24,11 @@ SESSIONS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data",
 os.makedirs(os.path.dirname(SESSIONS_FILE), exist_ok=True)
 
 class ResearchPanel(ctk.CTkFrame):
-    def __init__(self, master, research_agent: ResearchAgent, get_physics_report_callback=None, **kwargs):
+    def __init__(self, master, research_agent: ResearchAgent, get_physics_report_callback=None, on_model_change_callback=None, **kwargs):
         super().__init__(master, fg_color="#050d1e", **kwargs)
         self.agent = research_agent
         self.get_physics_report = get_physics_report_callback
+        self.on_model_change = on_model_change_callback
         
         self.loaded_document_text = ""
         self.loaded_document_name = ""
@@ -255,6 +256,31 @@ class ResearchPanel(ctk.CTkFrame):
         )
         clear_btn.pack(side="right")
 
+        # In-workspace Model Selector for RIA
+        self.model_combo = ctk.CTkComboBox(
+            chat_header,
+            values=["qwen3.5:9b", "gemini-2.0-flash", "gpt-4o-mini", "gpt-4o", "gemini-1.5-pro"],
+            font=("SF Pro", 10),
+            dropdown_font=("SF Pro", 10),
+            width=135,
+            height=24,
+            corner_radius=5,
+            fg_color="#1c212d",
+            button_color="#2fa572",
+            border_color="#262c3d",
+            command=self._on_model_selected
+        )
+        self.model_combo.pack(side="right", padx=(6, 8))
+        self.model_combo.set(self.agent.model if self.agent.model else "qwen3.5:9b")
+
+        model_tag = ctk.CTkLabel(
+            chat_header,
+            text="Model:",
+            font=("SF Pro", 10, "bold"),
+            text_color="#8b949e"
+        )
+        model_tag.pack(side="right", padx=(0, 2))
+
         # Scrollable Chat Display
         self.chat_box = ctk.CTkTextbox(
             self.right_main,
@@ -336,6 +362,30 @@ class ResearchPanel(ctk.CTkFrame):
             command=self._on_send
         )
         self.send_btn.pack(side="right")
+
+    def _on_model_selected(self, model_name: str):
+        from ui.settings_dialog import load_config, save_config
+        cfg = load_config()
+        cfg["model"] = model_name
+        if "qwen" in model_name.lower():
+            if not cfg.get("api_key") or cfg.get("api_key") == "sk-proj-...":
+                cfg["api_key"] = "ollama"
+            if not cfg.get("base_url"):
+                cfg["base_url"] = "http://localhost:11434/v1"
+        save_config(cfg)
+        
+        self.agent.set_credentials(
+            api_key=cfg.get("api_key", ""),
+            model=model_name,
+            base_url=cfg.get("base_url", ""),
+            gemini_key=cfg.get("gemini_key", "")
+        )
+        if self.on_model_change:
+            self.on_model_change(model_name)
+
+    def update_model_display(self, model_name: str):
+        if hasattr(self, "model_combo"):
+            self.model_combo.set(model_name)
 
     # ==================== SESSION MANAGEMENT ====================
 
