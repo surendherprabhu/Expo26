@@ -8,6 +8,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Tuple
 from openai import OpenAI, RateLimitError, AuthenticationError, APIConnectionError
+from core.vision_agent import VisionAgent
 
 SIMULATION_TOOLS = [
     {
@@ -181,21 +182,29 @@ CRITICAL OPERATIONAL RULES:
 """
 
 class AIAgent:
-    def __init__(self, physics_engine, api_key: Optional[str] = None, model: str = "gpt-4o-mini", base_url: Optional[str] = None):
+    def __init__(self, physics_engine, api_key: Optional[str] = None, model: str = "gpt-4o-mini", base_url: Optional[str] = None, gemini_key: Optional[str] = None):
         self.engine = physics_engine
         self.api_key = (api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
         self.model = model
         self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL", "")).strip()
+        self.gemini_key = (gemini_key or os.environ.get("GEMINI_API_KEY", "")).strip()
         self.client: Optional[OpenAI] = None
         self.conversation_history: List[Dict[str, Any]] = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
+        provider = "gemini" if "gemini" in self.model.lower() else "openai"
+        self.vision_agent = VisionAgent(provider=provider, api_key=self.api_key, gemini_key=self.gemini_key)
         self._init_client()
 
-    def set_api_key(self, api_key: str, base_url: Optional[str] = None):
+    def set_api_key(self, api_key: str, base_url: Optional[str] = None, gemini_key: str = ""):
         self.api_key = api_key.strip()
         if base_url is not None:
             self.base_url = base_url.strip()
+        if gemini_key:
+            self.gemini_key = gemini_key.strip()
+            
+        provider = "gemini" if "gemini" in self.model.lower() else "openai"
+        self.vision_agent.set_credentials(provider, self.api_key, self.gemini_key)
         self._init_client()
 
     def set_model(self, model: str):
@@ -288,14 +297,19 @@ class AIAgent:
         except Exception as e:
             return f"Error executing {function_name}: {e}"
 
-    def process_message(self, user_text: str) -> Tuple[str, List[str]]:
+    def process_message(self, user_text: str, image_path: Optional[str] = None) -> Tuple[str, List[str]]:
         """Processes user instructions cleanly without conversational stalling."""
-        if not self.is_online:
+        if not self.is_online and not image_path:
             return (
                 "⚠️ API Not Configured.\n\n"
                 "Please click '⚙ Settings & Presets' to configure your OpenAI key or local Ollama URL.",
                 []
             )
+
+        # If user uploaded a physical diagram or sketch, analyze it with Vision
+        if image_path and os.path.exists(image_path):
+            vision_spec = self.vision_agent.analyze_diagram_to_simulation(image_path)
+            user_text = f"{user_text}\n[Vision Diagram Extracted Specs: {vision_spec}]"
 
         actions_taken = []
         

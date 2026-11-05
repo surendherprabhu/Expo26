@@ -26,3 +26,7 @@ wheels/
 
 # macOS files
 .DS_Store
+
+# Generated image cache
+assets/generated_images/*
+!assets/generated_images/.gitkeep

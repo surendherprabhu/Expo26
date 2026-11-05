@@ -13,9 +13,48 @@ class ChatPanel(ctk.CTkFrame):
         self.on_send_message = on_send_message
         self.on_reset_world = on_reset_world
         
+        self.attached_image_path = ""
         self._build_top_bar()
         self._build_chat_display()
+        self._build_attachment_chip()
         self._build_input_bar()
+
+    def _build_attachment_chip(self):
+        self.attachment_chip = ctk.CTkFrame(self, fg_color="#161b22", corner_radius=6)
+        self.attachment_lbl = ctk.CTkLabel(
+            self.attachment_chip,
+            text="📎 Attached Image: None",
+            font=("SF Pro", 10),
+            text_color="#2fa572"
+        )
+        self.attachment_lbl.pack(side="left", padx=8, pady=2)
+        
+        del_btn = ctk.CTkButton(
+            self.attachment_chip,
+            text="✕",
+            font=("SF Pro", 9),
+            width=18,
+            height=18,
+            fg_color="transparent",
+            hover_color="#ef4444",
+            command=self._clear_attachment
+        )
+        del_btn.pack(side="right", padx=4)
+
+    def _on_attach_image(self):
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Attach Physical Diagram / Sketch",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("All Files", "*.*")]
+        )
+        if file_path:
+            self.attached_image_path = file_path
+            self.attachment_lbl.configure(text=f"📎 Image: {os.path.basename(file_path)}")
+            self.attachment_chip.pack(fill="x", padx=12, pady=(0, 4), before=self.input_frame)
+
+    def _clear_attachment(self):
+        self.attached_image_path = ""
+        self.attachment_chip.pack_forget()
 
     def _build_top_bar(self):
         """Clean header without redundant online status (handled in top window bar)."""
@@ -65,12 +104,25 @@ class ChatPanel(ctk.CTkFrame):
         )
 
     def _build_input_bar(self):
-        input_frame = ctk.CTkFrame(self, fg_color="transparent")
-        input_frame.pack(fill="x", padx=12, pady=(6, 12))
+        self.input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.input_frame.pack(fill="x", padx=12, pady=(6, 12))
+
+        self.btn_attach = ctk.CTkButton(
+            self.input_frame,
+            text="📷",
+            font=("SF Pro", 13),
+            width=36,
+            height=36,
+            fg_color="#1c212d",
+            hover_color="#2fa572",
+            corner_radius=8,
+            command=self._on_attach_image
+        )
+        self.btn_attach.pack(side="left", padx=(0, 6))
 
         self.input_entry = ctk.CTkEntry(
-            input_frame,
-            placeholder_text="Describe a simulation experiment...",
+            self.input_frame,
+            placeholder_text="Describe a simulation or attach diagram...",
             font=("SF Pro", 12),
             fg_color="#1c212d",
             border_color="#262c3d",
@@ -82,7 +134,7 @@ class ChatPanel(ctk.CTkFrame):
         self.input_entry.bind("<Return>", lambda e: self._handle_send())
 
         self.send_btn = ctk.CTkButton(
-            input_frame,
+            self.input_frame,
             text="Send",
             font=("SF Pro", 12, "bold"),
             fg_color="#2fa572",
@@ -96,16 +148,26 @@ class ChatPanel(ctk.CTkFrame):
 
     def _handle_send(self):
         text = self.input_entry.get().strip()
-        if not text:
+        img = self.attached_image_path
+        if not text and not img:
             return
+            
+        if not text and img:
+            text = "Analyze this uploaded diagram and reconstruct this physical experiment inside the chamber."
+            
         self.input_entry.delete(0, "end")
-        self.append_message("You", text)
+        self._clear_attachment()
+        
+        display_msg = text
+        if img:
+            display_msg += f"\n[Attached Diagram: {os.path.basename(img)}]"
+        self.append_message("You", display_msg)
         
         self.send_btn.configure(state="disabled")
         
         def run():
             try:
-                self.on_send_message(text)
+                self.on_send_message(text, img)
             finally:
                 self.after(0, lambda: self.send_btn.configure(state="normal"))
 

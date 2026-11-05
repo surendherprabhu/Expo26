@@ -1,48 +1,33 @@
 # PROJECT RIA — Research Intelligence Aariz
-### Universal AI Simulation Lab — SDG 9: Industry, Innovation & Infrastructure
+### Sustainable Research Intelligence & Universal Physics Lab — SDG 7, 9, 11, 12, 13
 
-**PROJECT RIA (Research Intelligence Aariz)** is an AI-powered simulation environment that connects Large Language Models (OpenAI or Local Ollama) to a verified 2D rigid-body scientific physics engine (Pymunk / Chipmunk2D). Users can construct, modify, inspect, and run actual mechanical experiments conversationally in real time.
+**PROJECT RIA (Research Intelligence Aariz)** is an integrated scientific pair-computing platform that unites:
+1. **Interactive 2D Rigid-Body Physics Lab (Pymunk / Chipmunk2D):** Natural-language apparatus construction, enclosed chamber boundaries, zero-torque mouse interaction, live $60\text{ FPS}$ telemetry, and automated scientific conclusion generation.
+2. **Sustainable Research Intelligence Suite (SDG 7, 9, 11, 12, 13):** Autonomous scholarly research fellow with keyless arXiv and CrossRef academic search, document ingestion/summarization, cross-domain physics data synthesis, and conceptual schematic generation.
+3. **Multimodal Vision ("Image-to-Simulation"):** Translates sketches, diagrams, and textbook plots into active physics simulations or quantitative graph analyses via OpenAI (GPT-4o) and Google Gemini.
+4. **Image Generation Engine:** Renders technical engineering blueprints and architectural prototype schematics via DALL-E 3 and Gemini Imagen 3.
 
 ---
 
 ## 🏛️ System Architecture
 
 ```
-                  ┌───────────────────────────────────────────────┐
-                  │   User Conversational Prompt & UI Controls    │
-                  └───────────────────────┬───────────────────────┘
-                                          │ (Natural Language)
-                                          ▼
-                  ┌───────────────────────────────────────────────┐
-                  │            AIAgent (LLM Controller)           │
-                  │       OpenAI (gpt-4o-mini) / Ollama (Qwen)    │
-                  │   Structured Tool Calling (JSON Schema API)   │
-                  └───────────────────────┬───────────────────────┘
-                                          │ (Typed Physical Action Tools)
-                                          ▼
-                  ┌───────────────────────────────────────────────┐
-                  │           PhysicsEngine (Pymunk 2D)           │
-                  │   • Solid Triangular Wedges & Incline Planes  │
-                  │   • Rigid Bodies, Masses, Moments of Inertia  │
-                  │   • Pin Joints, Springs, and Kinematics       │
-                  │   • Setup Freeze at t=0.0s & Snapshot State   │
-                  │   • Live Telemetry (v, a, h, Ek, Ep, p, Fn)   │
-                  └───────────────┬───────────────────────┬───────┘
-                                  │                       │
-      (Offscreen Pygame Rendering)▼                       ▼ (Telemetry / Data Stream)
-         ┌──────────────────────────────┐   ┌──────────────────────────────┐
-         │     PhysicsRenderer (PIL)    │   │  StatsPanel (Dynamic Cards)  │
-         │  • Light Laboratory Theme    │   │  • 60 FPS Real-Time Cards    │
-         │  • Dark Mode Toggle          │   │  • Experiment Control Sheet  │
-         │  • Mouse Grab & Fling Engine │   │  • Scientific Report Mode    │
-         └───────────────┬──────────────┘   └───────────────┬──────────────┘
-                         │                                  │
-                         └─────────────────┬────────────────┘
-                                           ▼
-                  ┌───────────────────────────────────────────────┐
-                  │    CustomTkinter 40:60 Split User Interface   │
-                  │      (Dark Aesthetic matching R.A.P.H.A.E.L)  │
-                  └───────────────────────────────────────────────┘
+                                  ┌───────────────────────────────────────────────────┐
+                                  │      PROJECT RIA Unified Desktop Application      │
+                                  └─────────────────────────┬─────────────────────────┘
+                                                            │
+                       ┌────────────────────────────────────┴────────────────────────────────────┐
+                       ▼                                                                         ▼
+   ┌───────────────────────────────────────┐                                 ┌───────────────────────────────────────┐
+   │     [ ⚛ Physics Simulation Lab ]      │                                 │  [ 🌱 Sustainable Research Suite ]    │
+   ├───────────────────────────────────────┤                                 ├───────────────────────────────────────┤
+   │ • 40:60 CustomTkinter Split View      │                                 │ • Document & Report Ingestion Zone    │
+   │ • AIAgent Tool Calling (OpenAI/Qwen)  │                                 │ • ResearchAgent Academic Fellow       │
+   │ • Pymunk Rigid Bodies & Enclosed Room │                                 │ • Live arXiv & CrossRef DOI Search    │
+   │ • Zero-Torque Mouse Grab & Rotation   │                                 │ • 1-Click SDG Dossiers (7, 9, 12, 13) │
+   │ • Dynamic Telemetry & Control Sheet   │                                 │ • Cross-Domain Physics Data Bridge    │
+   │ • Image-to-Simulation Diagram Parser  │                                 │ • Concept Schematic Engine (Imagen/D3)│
+   └───────────────────────────────────────┘                                 └───────────────────────────────────────┘
 ```
 
 ---

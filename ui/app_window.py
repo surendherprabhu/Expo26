@@ -19,6 +19,8 @@ from core.presets import PRESET_EXPERIMENTS, load_preset_by_id
 from ui.chat_panel import ChatPanel
 from ui.stats_panel import StatsPanel
 from ui.settings_dialog import SettingsDialog, load_config
+from core.research_agent import ResearchAgent
+from ui.research_panel import ResearchPanel
 
 APPLICATION_NAME = "PROJECT RIA"
 SUBTITLE = "Research Intelligence Aariz"
@@ -52,7 +54,15 @@ class AppWindow:
             self.physics,
             api_key=self.config.get("api_key", ""),
             model=self.config.get("model", "gpt-4o-mini"),
-            base_url=self.config.get("base_url", "")
+            base_url=self.config.get("base_url", ""),
+            gemini_key=self.config.get("gemini_key", "")
+        )
+        
+        self.research_agent = ResearchAgent(
+            api_key=self.config.get("api_key", ""),
+            model=self.config.get("model", "gpt-4o-mini"),
+            base_url=self.config.get("base_url", ""),
+            gemini_key=self.config.get("gemini_key", "")
         )
 
         self._build_header()
@@ -111,6 +121,37 @@ class AppWindow:
         )
         sdg_badge.pack(side="left")
 
+        # Mode Switcher (Physics Simulation vs Sustainable Research)
+        self.mode_frame = ctk.CTkFrame(self.header_frame, fg_color="#161b22", corner_radius=6)
+        self.mode_frame.pack(side="left", padx=20)
+
+        self.btn_mode_physics = ctk.CTkButton(
+            self.mode_frame,
+            text="⚛ Physics Simulation Lab",
+            font=("SF Pro", 11, "bold"),
+            fg_color="#2fa572",
+            text_color="#ffffff",
+            width=165,
+            height=28,
+            corner_radius=5,
+            command=self._switch_to_physics
+        )
+        self.btn_mode_physics.pack(side="left", padx=2, pady=2)
+
+        self.btn_mode_research = ctk.CTkButton(
+            self.mode_frame,
+            text="🌱 Sustainable Research Intelligence",
+            font=("SF Pro", 11, "bold"),
+            fg_color="transparent",
+            text_color="#8b949e",
+            hover_color="#1c212d",
+            width=230,
+            height=28,
+            corner_radius=5,
+            command=self._switch_to_research
+        )
+        self.btn_mode_research.pack(side="left", padx=2, pady=2)
+
         self.conn_label = ctk.CTkLabel(
             self.header_frame,
             text="Online 🌐" if self.ai_agent.is_online else "Offline 🔌",
@@ -119,21 +160,41 @@ class AppWindow:
         )
         self.conn_label.pack(side="right", padx=16)
 
+    def _switch_to_physics(self):
+        self.research_container.pack_forget()
+        self.physics_container.pack(fill="both", expand=True, padx=12, pady=8)
+        self.btn_mode_physics.configure(fg_color="#2fa572", text_color="#ffffff")
+        self.btn_mode_research.configure(fg_color="transparent", text_color="#8b949e")
+
+    def _switch_to_research(self):
+        self.physics_container.pack_forget()
+        self.research_container.pack(fill="both", expand=True, padx=12, pady=8)
+        self.btn_mode_physics.configure(fg_color="transparent", text_color="#8b949e")
+        self.btn_mode_research.configure(fg_color="#2fa572", text_color="#ffffff")
+
     def _build_main_split(self):
-        self.main_container = ctk.CTkFrame(self.root, fg_color="transparent")
-        self.main_container.pack(fill="both", expand=True, padx=12, pady=8)
+        # Physics View Container
+        self.physics_container = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.physics_container.pack(fill="both", expand=True, padx=12, pady=8)
 
         # 40% Left Pane: Chat
         self.left_pane = ChatPanel(
-            self.main_container,
+            self.physics_container,
             on_send_message=self._handle_user_message,
             on_reset_world=self._handle_reset_world
         )
         self.left_pane.place(relx=0.0, rely=0.0, relwidth=0.38, relheight=1.0)
 
         # 60% Right Pane: Viewport + Telemetry/Report
-        self.right_container = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        self.right_container = ctk.CTkFrame(self.physics_container, fg_color="transparent")
         self.right_container.place(relx=0.39, rely=0.0, relwidth=0.61, relheight=1.0)
+
+        # Sustainable Research Intelligence Suite Container (Init hidden, toggled via header)
+        self.research_container = ResearchPanel(
+            self.root,
+            research_agent=self.research_agent,
+            get_physics_report_callback=self.physics.generate_experiment_report
+        )
 
         # Viewport Frame (Upper ~74%)
         self.viewport_frame = ctk.CTkFrame(
@@ -343,8 +404,8 @@ class AppWindow:
         self.preset_combo.set("Choose Preset...")
         self.left_pane.append_message("System", "World cleared.")
 
-    def _handle_user_message(self, text: str):
-        explanation, actions = self.ai_agent.process_message(text)
+    def _handle_user_message(self, text: str, image_path: Optional[str] = None):
+        explanation, actions = self.ai_agent.process_message(text, image_path=image_path)
         self.root.after(0, lambda: self._on_message_finished(explanation, actions))
 
     def _on_message_finished(self, explanation: str, actions: list):
@@ -356,12 +417,13 @@ class AppWindow:
     def _open_settings(self):
         self.settings_dialog.show()
 
-    def _on_settings_saved(self, new_key: str, new_model: str, new_url: str = ""):
-        self.ai_agent.set_api_key(new_key, new_url)
+    def _on_settings_saved(self, new_key: str, new_model: str, new_url: str = "", new_gemini_key: str = ""):
+        self.ai_agent.set_api_key(new_key, new_url, gemini_key=new_gemini_key)
         self.ai_agent.set_model(new_model)
+        self.research_agent.set_credentials(new_key, new_model, new_url, gemini_key=new_gemini_key)
         self.model_label.configure(text=f"Model: {new_model}")
         
-        is_on = self.ai_agent.is_online
+        is_on = self.ai_agent.is_online or bool(new_gemini_key)
         self.conn_label.configure(
             text="Online 🌐" if is_on else "Offline 🔌",
             text_color="#2fa572" if is_on else "#8b949e"
