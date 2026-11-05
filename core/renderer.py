@@ -1,5 +1,5 @@
 """
-Renderer Module for Universal AI Simulation Environment.
+Renderer Module for PROJECT RIA — Research Intelligence Aariz.
 Renders Pymunk rigid bodies inside an enclosed 4-wall laboratory viewport.
 Features:
 - Center-of-mass mouse grabbing (zero unwanted off-center rotational torque)

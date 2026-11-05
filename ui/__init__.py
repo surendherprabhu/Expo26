@@ -1,1 +1,1 @@
-"""UI modules for Universal AI Simulation Environment."""
+"""UI modules for PROJECT RIA — Research Intelligence Aariz."""

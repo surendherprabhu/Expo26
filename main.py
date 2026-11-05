@@ -1,5 +1,5 @@
 """
-Universal AI Simulation Environment (Expo26)
+PROJECT RIA — Research Intelligence Aariz
 SDG 9 — Industry, Innovation & Infrastructure
 
 Run this script to launch the application:

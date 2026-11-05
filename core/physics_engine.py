@@ -1,5 +1,5 @@
 """
-Physics Engine Module for Universal AI Simulation Environment (SDG 9).
+Physics Engine Module for PROJECT RIA — Research Intelligence Aariz (SDG 9).
 Features:
 - Fully enclosed 4-wall boundary system (ceiling, floor, left, right)
 - Dynamic boundary synchronization on window resize

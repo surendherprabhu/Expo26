@@ -1,5 +1,5 @@
 """
-AI Agent Module for Universal AI Simulation Environment (SDG 9).
+AI Agent Module for PROJECT RIA — Research Intelligence Aariz (SDG 9).
 Connects to LLM with robust tool calling, conversational history pruning,
 safe argument fallbacks, and anti-hallucination guards.
 """
@@ -167,7 +167,7 @@ SIMULATION_TOOLS = [
     }
 ]
 
-SYSTEM_PROMPT = """You are the AI Scientific Experimentation Controller for an interactive physics simulation lab (SDG 9).
+SYSTEM_PROMPT = """You are the AI Scientific Experimentation Controller for PROJECT RIA (Research Intelligence Aariz), an interactive physics simulation lab (SDG 9).
 Canvas: enclosed chamber 760 px wide by 480 px high. Floor is at the bottom (y ≈ 440). Standard gravity: (0, 900).
 
 CRITICAL OPERATIONAL RULES:

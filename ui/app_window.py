@@ -1,5 +1,5 @@
 """
-Main Application Window for Universal AI Simulation Environment (SDG 9).
+Main Application Window for PROJECT RIA — Research Intelligence Aariz (SDG 9).
 Integrates:
 - Enclosed 4-wall laboratory viewport with dynamic boundary synchronization
 - Clean Light Lab canvas with dark mode toggle
@@ -20,8 +20,8 @@ from ui.chat_panel import ChatPanel
 from ui.stats_panel import StatsPanel
 from ui.settings_dialog import SettingsDialog, load_config
 
-APPLICATION_NAME = "UNIVERSAL AI SIMULATION LAB"
-SUBTITLE = "SDG 9: Industry, Innovation & Infrastructure"
+APPLICATION_NAME = "PROJECT RIA"
+SUBTITLE = "Research Intelligence Aariz"
 
 class AppWindow:
     def __init__(self):
@@ -85,16 +85,28 @@ class AppWindow:
             font=("SF Pro", 13, "bold"),
             text_color="#ffffff"
         )
-        title_lbl.pack(side="left", padx=(0, 10))
+        title_lbl.pack(side="left", padx=(0, 8))
 
-        sdg_badge = ctk.CTkLabel(
+        ria_badge = ctk.CTkLabel(
             title_box,
-            text="SDG 9 / 7 / 12",
-            font=("SF Pro", 9, "bold"),
+            text="Research Intelligence Aariz",
+            font=("SF Pro", 10, "bold"),
             fg_color="#1f2937",
             text_color="#2fa572",
             corner_radius=4,
-            padx=6,
+            padx=7,
+            pady=2
+        )
+        ria_badge.pack(side="left", padx=(0, 6))
+
+        sdg_badge = ctk.CTkLabel(
+            title_box,
+            text="SDG 9",
+            font=("SF Pro", 9),
+            fg_color="#161b22",
+            text_color="#8b949e",
+            corner_radius=4,
+            padx=5,
             pady=2
         )
         sdg_badge.pack(side="left")

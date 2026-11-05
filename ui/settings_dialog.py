@@ -1,5 +1,5 @@
 """
-Settings Dialog for Universal AI Simulation Environment.
+Settings Dialog for PROJECT RIA — Research Intelligence Aariz.
 Includes two subdivisions:
 1. API & Model Configuration (OpenAI, Ollama, custom base URLs).
 2. Preset Lab Experiments: Verified scientific experiments with defined aims, apparatus, and conclusions.

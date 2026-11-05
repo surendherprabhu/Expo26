@@ -1,5 +1,5 @@
 """
-Chat Panel Module for Universal AI Simulation Environment (SDG 9).
+Chat Panel Module for PROJECT RIA — Research Intelligence Aariz (SDG 9).
 40% left pane: Clean experiment protocol log, user prompt input, and send action.
 """
 
@@ -59,7 +59,7 @@ class ChatPanel(ctk.CTkFrame):
         
         self.append_message(
             "System",
-            "Universal AI Simulation Lab ready.\n"
+            "PROJECT RIA initialized (Research Intelligence Aariz).\n"
             "Describe any physical experiment (e.g. Galileo's drop, friction on a wedge, skid braking, or elastic collisions).\n"
             "Apparatus will construct in an enclosed chamber and freeze at t=0.0s ready for release."
         )

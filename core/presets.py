@@ -1,5 +1,5 @@
 """
-Comprehensive Preset Experiments Library for Universal AI Simulation Environment (SDG 9).
+Comprehensive Preset Experiments Library for PROJECT RIA — Research Intelligence Aariz (SDG 9).
 Provides 10 verified, demonstration-ready scientific experiments with defined aims,
 apparatus setups, theoretical benchmarks, and live telemetry.
 """

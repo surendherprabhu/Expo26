@@ -1,7 +1,7 @@
-# Universal AI Simulation Environment (Expo26)
-### SDG 9 — Industry, Innovation and Infrastructure
+# PROJECT RIA — Research Intelligence Aariz
+### Universal AI Simulation Lab — SDG 9: Industry, Innovation & Infrastructure
 
-An AI-powered simulation environment that connects Large Language Models (OpenAI or Local Ollama) to a verified 2D rigid-body scientific physics engine (Pymunk / Chipmunk2D). Users can construct, modify, inspect, and run actual mechanical experiments conversationally in real time.
+**PROJECT RIA (Research Intelligence Aariz)** is an AI-powered simulation environment that connects Large Language Models (OpenAI or Local Ollama) to a verified 2D rigid-body scientific physics engine (Pymunk / Chipmunk2D). Users can construct, modify, inspect, and run actual mechanical experiments conversationally in real time.
 
 ---
 
