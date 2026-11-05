@@ -2,13 +2,15 @@
 Sustainable Research Intelligence Workspace Panel for PROJECT RIA.
 Provides:
 - Document & Report Ingestion (Upload, Paste, Summarize)
-- 1-Click SDG Research Dossiers (SDG 7, 9, 12, 13)
+- Persistent Chat Sessions & Context (Save, Load, Delete, Continue prior chats)
 - Bridge synthesis with Physics Simulation data
 - Live Academic Citation Cards (arXiv & CrossRef)
 - Multimodal Vision (upload charts/diagrams) and Conceptual Schematic Generation
 """
 
 import os
+import time
+import json
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -16,7 +18,10 @@ import customtkinter as ctk
 from typing import Optional, Dict, Any, List
 from PIL import Image, ImageTk
 
-from core.research_agent import ResearchAgent, SDG_DOSSIERS
+from core.research_agent import ResearchAgent
+
+SESSIONS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "research_chat_sessions.json")
+os.makedirs(os.path.dirname(SESSIONS_FILE), exist_ok=True)
 
 class ResearchPanel(ctk.CTkFrame):
     def __init__(self, master, research_agent: ResearchAgent, get_physics_report_callback=None, **kwargs):
@@ -29,10 +34,47 @@ class ResearchPanel(ctk.CTkFrame):
         self.attached_image_path = ""
         self._image_references = []
         
+        # Sessions storage
+        self.sessions: Dict[str, Dict[str, Any]] = self._load_all_sessions()
+        self.active_session_id: str = ""
+        self.session_buttons: Dict[str, ctk.CTkFrame] = {}
+
         self._build_layout()
+        self._init_active_session()
+
+    def _load_all_sessions(self) -> Dict[str, Dict[str, Any]]:
+        """Loads saved chat sessions from JSON storage."""
+        if os.path.exists(SESSIONS_FILE):
+            try:
+                with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading sessions: {e}")
+        return {}
+
+    def _save_all_sessions(self):
+        """Persists all chat sessions to JSON storage."""
+        try:
+            with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.sessions, f, indent=2)
+        except Exception as e:
+            print(f"Error saving sessions: {e}")
+
+    def _init_active_session(self):
+        """Restores the most recent session or creates a fresh one."""
+        if self.sessions:
+            # Sort by last updated
+            sorted_keys = sorted(
+                self.sessions.keys(),
+                key=lambda k: self.sessions[k].get("timestamp", 0),
+                reverse=True
+            )
+            self._load_session(sorted_keys[0])
+        else:
+            self._create_new_session()
 
     def _build_layout(self):
-        # 32% Left Sidebar (Ingestion, Dossiers, Actions)
+        # 32% Left Sidebar (Ingestion, Saved Chats, Actions)
         self.left_sidebar = ctk.CTkFrame(self, fg_color="#0e1117", corner_radius=10, border_width=1, border_color="#1c212d")
         self.left_sidebar.place(relx=0.01, rely=0.015, relwidth=0.32, relheight=0.97)
 
@@ -44,21 +86,21 @@ class ResearchPanel(ctk.CTkFrame):
         self._build_chat_panel()
 
     def _build_sidebar(self):
-        # Header
+        # Document Ingestion Header
         top_bar = ctk.CTkFrame(self.left_sidebar, fg_color="transparent")
-        top_bar.pack(fill="x", padx=12, pady=(12, 6))
+        top_bar.pack(fill="x", padx=12, pady=(10, 4))
         
         lbl = ctk.CTkLabel(
             top_bar,
-            text="📑 RESEARCH DOSSIERS & INGESTION",
-            font=("SF Pro", 11, "bold"),
+            text="📑 DOCUMENT INGESTION",
+            font=("SF Pro", 10, "bold"),
             text_color="#8b949e"
         )
         lbl.pack(side="left")
 
-        # Ingestion Buttons Frame
+        # Ingestion Buttons
         btn_frame = ctk.CTkFrame(self.left_sidebar, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=10, pady=4)
+        btn_frame.pack(fill="x", padx=10, pady=2)
 
         self.btn_upload = ctk.CTkButton(
             btn_frame,
@@ -86,7 +128,7 @@ class ResearchPanel(ctk.CTkFrame):
 
         # Loaded Document Card
         self.doc_card = ctk.CTkFrame(self.left_sidebar, fg_color="#161b22", corner_radius=6, border_width=1, border_color="#21262d")
-        self.doc_card.pack(fill="x", padx=10, pady=6)
+        self.doc_card.pack(fill="x", padx=10, pady=4)
         
         self.doc_title_lbl = ctk.CTkLabel(
             self.doc_card,
@@ -104,38 +146,47 @@ class ResearchPanel(ctk.CTkFrame):
         )
         self.doc_info_lbl.pack(anchor="w", padx=8, pady=(0, 4))
 
-        # SDG Dossiers Section
+        # Saved Chat Sessions Header (Replacing Dossiers)
+        session_hdr = ctk.CTkFrame(self.left_sidebar, fg_color="transparent")
+        session_hdr.pack(fill="x", padx=10, pady=(10, 4))
+
         ctk.CTkLabel(
-            self.left_sidebar,
-            text="🌍 1-CLICK SDG RESEARCH DOSSIERS",
+            session_hdr,
+            text="💬 SAVED CHATS & CONTEXT",
             font=("SF Pro", 10, "bold"),
             text_color="#8b949e"
-        ).pack(anchor="w", padx=12, pady=(10, 4))
+        ).pack(side="left")
 
-        dossier_box = ctk.CTkFrame(self.left_sidebar, fg_color="transparent")
-        dossier_box.pack(fill="x", padx=10, pady=2)
+        self.btn_new_chat = ctk.CTkButton(
+            session_hdr,
+            text="+ New Chat",
+            font=("SF Pro", 10, "bold"),
+            fg_color="#1f2937",
+            hover_color="#2fa572",
+            width=80,
+            height=24,
+            corner_radius=5,
+            command=self._create_new_session
+        )
+        self.btn_new_chat.pack(side="right")
 
-        for key, data in SDG_DOSSIERS.items():
-            btn = ctk.CTkButton(
-                dossier_box,
-                text=data["title"],
-                font=("SF Pro", 10),
-                fg_color="#1c212d",
-                hover_color="#21352e",
-                anchor="w",
-                height=28,
-                corner_radius=6,
-                command=lambda k=key: self._on_load_dossier(k)
-            )
-            btn.pack(fill="x", pady=2)
+        # Scrollable Sessions Container
+        self.sessions_scroll = ctk.CTkScrollableFrame(
+            self.left_sidebar,
+            fg_color="#111622",
+            corner_radius=6,
+            border_width=1,
+            border_color="#1c212d"
+        )
+        self.sessions_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 6))
 
-        # Cross-Domain Physics Bridge Section
+        # Cross-Domain Physics Bridge
         ctk.CTkLabel(
             self.left_sidebar,
             text="⚛ CROSS-DOMAIN PHYSICS BRIDGE",
             font=("SF Pro", 10, "bold"),
             text_color="#8b949e"
-        ).pack(anchor="w", padx=12, pady=(12, 4))
+        ).pack(anchor="w", padx=10, pady=(6, 2))
 
         self.btn_bridge = ctk.CTkButton(
             self.left_sidebar,
@@ -144,15 +195,15 @@ class ResearchPanel(ctk.CTkFrame):
             fg_color="#1f2937",
             text_color="#58a6ff",
             hover_color="#283548",
-            height=30,
+            height=28,
             corner_radius=6,
             command=self._on_bridge_physics
         )
         self.btn_bridge.pack(fill="x", padx=10, pady=2)
 
-        # Bottom Tools & Export
+        # Bottom Tools
         bottom_tools = ctk.CTkFrame(self.left_sidebar, fg_color="transparent")
-        bottom_tools.pack(fill="x", side="bottom", padx=10, pady=10)
+        bottom_tools.pack(fill="x", side="bottom", padx=10, pady=8)
 
         self.btn_schematic = ctk.CTkButton(
             bottom_tools,
@@ -160,7 +211,7 @@ class ResearchPanel(ctk.CTkFrame):
             font=("SF Pro", 10, "bold"),
             fg_color="#1c212d",
             hover_color="#475569",
-            height=28,
+            height=26,
             corner_radius=6,
             command=self._on_prompt_schematic
         )
@@ -172,7 +223,7 @@ class ResearchPanel(ctk.CTkFrame):
             font=("SF Pro", 10, "bold"),
             fg_color="#1c212d",
             hover_color="#2fa572",
-            height=28,
+            height=26,
             corner_radius=6,
             command=self._on_export_markdown
         )
@@ -181,23 +232,23 @@ class ResearchPanel(ctk.CTkFrame):
     def _build_chat_panel(self):
         # Header
         chat_header = ctk.CTkFrame(self.right_main, fg_color="transparent")
-        chat_header.pack(fill="x", padx=14, pady=(12, 6))
+        chat_header.pack(fill="x", padx=14, pady=(10, 4))
 
-        title = ctk.CTkLabel(
+        self.session_title_lbl = ctk.CTkLabel(
             chat_header,
-            text="💬 RESEARCH INTELLIGENCE SCHOLARLY PROTOCOL",
+            text="💬 RESEARCH INTELLIGENCE PROTOCOL",
             font=("SF Pro", 11, "bold"),
             text_color="#8b949e"
         )
-        title.pack(side="left")
+        self.session_title_lbl.pack(side="left")
 
         clear_btn = ctk.CTkButton(
             chat_header,
-            text="↺ Clear",
+            text="↺ Clear Chat",
             font=("SF Pro", 10),
             fg_color="#1c212d",
             hover_color="#3d4455",
-            width=60,
+            width=75,
             height=24,
             corner_radius=5,
             command=self._on_clear_chat
@@ -217,15 +268,6 @@ class ResearchPanel(ctk.CTkFrame):
             border_color="#1c212d"
         )
         self.chat_box.pack(fill="both", expand=True, padx=12, pady=4)
-
-        # Welcome message
-        self.append_message(
-            "System",
-            "PROJECT RIA — Sustainable Research Intelligence Suite initialized.\n"
-            "• Ask any research question, query peer-reviewed literature (arXiv & CrossRef), or summarize reports.\n"
-            "• Upload scientific charts or physics sketches via [ 📷 / 📎 ] for multimodal vision analysis.\n"
-            "• Generate conceptual prototype blueprints with [ 🎨 Schematic ]."
-        )
 
         # Image Attachment Status Chip
         self.attachment_chip = ctk.CTkFrame(self.right_main, fg_color="#161b22", corner_radius=6)
@@ -270,7 +312,7 @@ class ResearchPanel(ctk.CTkFrame):
         # Text input
         self.input_entry = ctk.CTkEntry(
             input_frame,
-            placeholder_text="Ask a sustainable research question, search literature, or summarize...",
+            placeholder_text="Ask a research question, search literature, or summarize...",
             font=("SF Pro", 12),
             fg_color="#161b22",
             border_color="#21262d",
@@ -295,6 +337,184 @@ class ResearchPanel(ctk.CTkFrame):
         )
         self.send_btn.pack(side="right")
 
+    # ==================== SESSION MANAGEMENT ====================
+
+    def _create_new_session(self):
+        """Creates a fresh research chat session with clean context."""
+        session_id = f"session_{int(time.time() * 1000)}"
+        welcome_text = (
+            "PROJECT RIA — Sustainable Research Intelligence Suite initialized.\n"
+            "• Ask any research question, query peer-reviewed literature (arXiv & CrossRef), or summarize reports.\n"
+            "• Upload scientific charts or physics sketches via [ 📷 / 📎 ] for multimodal vision analysis.\n"
+            "• Generate conceptual prototype blueprints with [ 🎨 Schematic ]."
+        )
+        
+        new_session = {
+            "id": session_id,
+            "title": "New Research Chat",
+            "timestamp": time.time(),
+            "date_str": time.strftime("%b %d, %H:%M"),
+            "document_name": "",
+            "document_text": "",
+            "messages": [
+                {
+                    "sender": "System",
+                    "text": welcome_text,
+                    "citations": None,
+                    "image_path": None
+                }
+            ],
+            "conversation_history": []
+        }
+        
+        self.sessions[session_id] = new_session
+        self._save_all_sessions()
+        self._load_session(session_id)
+
+    def _load_session(self, session_id: str):
+        """Switches active session and restores all messages, documents, and LLM context."""
+        if session_id not in self.sessions:
+            return
+
+        self.active_session_id = session_id
+        session = self.sessions[session_id]
+
+        # 1. Restore Document context
+        self.loaded_document_name = session.get("document_name", "")
+        self.loaded_document_text = session.get("document_text", "")
+        if self.loaded_document_name:
+            self.doc_title_lbl.configure(text=f"📄 {self.loaded_document_name}", text_color="#2fa572")
+            self.doc_info_lbl.configure(text=f"{len(self.loaded_document_text):,} chars loaded.")
+        else:
+            self.doc_title_lbl.configure(text="No document loaded", text_color="#8b949e")
+            self.doc_info_lbl.configure(text="Upload .pdf, .txt, or paste an academic paper.")
+
+        # 2. Restore LLM Conversation History
+        hist = session.get("conversation_history", [])
+        if hist:
+            self.agent.conversation_history = list(hist)
+        else:
+            self.agent.clear_history()
+
+        # 3. Restore Chat View
+        self.chat_box.configure(state="normal")
+        self.chat_box.delete("1.0", "end")
+        self._image_references.clear()
+
+        messages = session.get("messages", [])
+        for msg in messages:
+            self._render_message_to_box(
+                sender=msg.get("sender", "System"),
+                text=msg.get("text", ""),
+                citations=msg.get("citations"),
+                image_path=msg.get("image_path")
+            )
+        self.chat_box.configure(state="disabled")
+
+        # 4. Update Header Title
+        self.session_title_lbl.configure(text=f"💬 {session.get('title', 'Research Protocol')}")
+
+        # 5. Refresh Sessions List UI
+        self._render_sessions_list()
+
+    def _delete_session(self, session_id: str):
+        """Deletes a saved chat session."""
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            self._save_all_sessions()
+            
+            if self.active_session_id == session_id:
+                if self.sessions:
+                    next_id = list(self.sessions.keys())[0]
+                    self._load_session(next_id)
+                else:
+                    self._create_new_session()
+            else:
+                self._render_sessions_list()
+
+    def _render_sessions_list(self):
+        """Renders the saved chat session cards in the sidebar."""
+        for widget in self.sessions_scroll.winfo_children():
+            widget.destroy()
+
+        if not self.sessions:
+            ctk.CTkLabel(
+                self.sessions_scroll,
+                text="No saved chats yet.\nClick '+ New Chat' to begin.",
+                font=("SF Pro", 9),
+                text_color="#555f6d"
+            ).pack(pady=20)
+            return
+
+        sorted_keys = sorted(
+            self.sessions.keys(),
+            key=lambda k: self.sessions[k].get("timestamp", 0),
+            reverse=True
+        )
+
+        for s_id in sorted_keys:
+            s = self.sessions[s_id]
+            is_active = (s_id == self.active_session_id)
+            
+            card = ctk.CTkFrame(
+                self.sessions_scroll,
+                fg_color="#182721" if is_active else "#161b22",
+                border_width=1,
+                border_color="#2fa572" if is_active else "#21262d",
+                corner_radius=6,
+                height=42
+            )
+            card.pack(fill="x", pady=2, padx=2)
+            card.pack_propagate(False)
+
+            # Left Clickable Area
+            info_frame = ctk.CTkFrame(card, fg_color="transparent")
+            info_frame.pack(side="left", fill="both", expand=True, padx=(6, 2), pady=3)
+
+            title_txt = s.get("title", "Research Chat")
+            if len(title_txt) > 26:
+                title_txt = title_txt[:26] + "..."
+
+            t_lbl = ctk.CTkLabel(
+                info_frame,
+                text=title_txt,
+                font=("SF Pro", 10, "bold" if is_active else "normal"),
+                text_color="#2fa572" if is_active else "#c9d1d9",
+                anchor="w"
+            )
+            t_lbl.pack(fill="x")
+
+            d_lbl = ctk.CTkLabel(
+                info_frame,
+                text=f"{s.get('date_str', '')} • {len(s.get('messages', []))} msgs",
+                font=("SF Pro", 8),
+                text_color="#8b949e" if is_active else "#555f6d",
+                anchor="w"
+            )
+            d_lbl.pack(fill="x")
+
+            # Bind clicks to load session
+            card.bind("<Button-1>", lambda e, sid=s_id: self._load_session(sid))
+            info_frame.bind("<Button-1>", lambda e, sid=s_id: self._load_session(sid))
+            t_lbl.bind("<Button-1>", lambda e, sid=s_id: self._load_session(sid))
+            d_lbl.bind("<Button-1>", lambda e, sid=s_id: self._load_session(sid))
+
+            # Delete button
+            del_btn = ctk.CTkButton(
+                card,
+                text="✕",
+                font=("SF Pro", 9),
+                fg_color="transparent",
+                hover_color="#ef4444",
+                text_color="#8b949e",
+                width=20,
+                height=20,
+                command=lambda sid=s_id: self._delete_session(sid)
+            )
+            del_btn.pack(side="right", padx=4)
+
+    # ==================== ACTIONS & INGESTION ====================
+
     def _on_upload_report(self):
         file_path = filedialog.askopenfilename(
             title="Select Research Document",
@@ -310,7 +530,6 @@ class ResearchPanel(ctk.CTkFrame):
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
             elif ext == ".pdf":
-                # Basic pdf reading if pypdf is installed or fallback
                 try:
                     import pypdf
                     reader = pypdf.PdfReader(file_path)
@@ -326,6 +545,13 @@ class ResearchPanel(ctk.CTkFrame):
             self.doc_title_lbl.configure(text=f"📄 {self.loaded_document_name}", text_color="#2fa572")
             self.doc_info_lbl.configure(text=f"{len(content):,} characters ingested. Ready to summarize.")
             
+            # Save into active session
+            if self.active_session_id in self.sessions:
+                s = self.sessions[self.active_session_id]
+                s["document_name"] = self.loaded_document_name
+                s["document_text"] = self.loaded_document_text
+                self._save_all_sessions()
+
             self.append_message(
                 "System",
                 f"Ingested document '{self.loaded_document_name}' ({len(content):,} chars).\n"
@@ -353,26 +579,25 @@ class ResearchPanel(ctk.CTkFrame):
                 self.loaded_document_name = "Pasted_Research_Excerpt.txt"
                 self.doc_title_lbl.configure(text=f"📋 {self.loaded_document_name}", text_color="#2fa572")
                 self.doc_info_lbl.configure(text=f"{len(val):,} characters pasted. Ready for analysis.")
+                
+                if self.active_session_id in self.sessions:
+                    s = self.sessions[self.active_session_id]
+                    s["document_name"] = self.loaded_document_name
+                    s["document_text"] = self.loaded_document_text
+                    self._save_all_sessions()
+
                 self.append_message("System", f"Loaded pasted research excerpt ({len(val):,} chars). Ready to analyze.")
             dialog.destroy()
             
         btn = ctk.CTkButton(dialog, text="Ingest Text", fg_color="#2fa572", command=save)
         btn.pack(pady=10)
 
-    def _on_load_dossier(self, dossier_key: str):
-        data = SDG_DOSSIERS.get(dossier_key)
-        if not data:
-            return
-        self.input_entry.delete(0, "end")
-        self.input_entry.insert(0, f"Synthesize academic research on {data['title']} with key peer-reviewed literature.")
-        self._on_send()
-
     def _on_bridge_physics(self):
         if not self.get_physics_report:
             messagebox.showinfo("Physics Bridge", "No physics engine report callback available.")
             return
         report = self.get_physics_report()
-        if not report or report.get("title") == "Physics Experiment" and report.get("duration_sec", 0) == 0:
+        if not report or (report.get("title") == "Physics Experiment" and report.get("duration_sec", 0) == 0):
             messagebox.showinfo("Physics Bridge", "No active simulation run recorded yet.\nRun an experiment in the Physics Lab first, then click Bridge!")
             return
             
@@ -418,6 +643,14 @@ class ResearchPanel(ctk.CTkFrame):
         self.chat_box.configure(state="normal")
         self.chat_box.delete("1.0", "end")
         self.chat_box.configure(state="disabled")
+        
+        if self.active_session_id in self.sessions:
+            s = self.sessions[self.active_session_id]
+            s["messages"] = []
+            s["conversation_history"] = []
+            self._save_all_sessions()
+            self._render_sessions_list()
+            
         self.append_message("System", "Research dialogue cleared.")
 
     def _on_export_markdown(self):
@@ -450,6 +683,15 @@ class ResearchPanel(ctk.CTkFrame):
         self.input_entry.delete(0, "end")
         self.send_btn.configure(state="disabled", text="Researching...")
 
+        # Update session title if first query
+        if self.active_session_id in self.sessions:
+            s = self.sessions[self.active_session_id]
+            if s.get("title") == "New Research Chat":
+                s["title"] = text[:28] + ("..." if len(text) > 28 else "")
+                self.session_title_lbl.configure(text=f"💬 {s['title']}")
+                self._save_all_sessions()
+                self._render_sessions_list()
+
         # Append user message
         user_display = text
         if img_to_send:
@@ -473,6 +715,25 @@ class ResearchPanel(ctk.CTkFrame):
         self.append_message("Research Intelligence", reply, citations=citations, image_path=gen_img)
 
     def append_message(self, sender: str, text: str, citations: Optional[List[Dict[str, Any]]] = None, image_path: Optional[str] = None):
+        """Renders message to chat display and persists into active session."""
+        self._render_message_to_box(sender, text, citations, image_path)
+
+        # Persist into active session storage
+        if self.active_session_id in self.sessions:
+            s = self.sessions[self.active_session_id]
+            s["messages"].append({
+                "sender": sender,
+                "text": text,
+                "citations": citations,
+                "image_path": image_path
+            })
+            s["conversation_history"] = list(self.agent.conversation_history)
+            s["timestamp"] = time.time()
+            s["date_str"] = time.strftime("%b %d, %H:%M")
+            self._save_all_sessions()
+            self._render_sessions_list()
+
+    def _render_message_to_box(self, sender: str, text: str, citations: Optional[List[Dict[str, Any]]] = None, image_path: Optional[str] = None):
         self.chat_box.configure(state="normal")
         self.chat_box.insert("end", "\n")
 
@@ -507,7 +768,6 @@ class ResearchPanel(ctk.CTkFrame):
         if image_path and os.path.exists(image_path):
             try:
                 pil_img = Image.open(image_path)
-                # Resize for chat viewport
                 pil_img.thumbnail((450, 300), Image.Resampling.LANCZOS)
                 tk_img = ImageTk.PhotoImage(pil_img)
                 self._image_references.append(tk_img)

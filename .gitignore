@@ -30,3 +30,7 @@ wheels/
 # Generated image cache
 assets/generated_images/*
 !assets/generated_images/.gitkeep
+
+# Local user chat sessions
+data/*
+!data/.gitkeep

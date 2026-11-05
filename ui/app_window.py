@@ -104,22 +104,10 @@ class AppWindow:
             fg_color="#1f2937",
             text_color="#2fa572",
             corner_radius=4,
-            padx=7,
+            padx=8,
             pady=2
         )
-        ria_badge.pack(side="left", padx=(0, 6))
-
-        sdg_badge = ctk.CTkLabel(
-            title_box,
-            text="SDG 9",
-            font=("SF Pro", 9),
-            fg_color="#161b22",
-            text_color="#8b949e",
-            corner_radius=4,
-            padx=5,
-            pady=2
-        )
-        sdg_badge.pack(side="left")
+        ria_badge.pack(side="left")
 
         # Mode Switcher (Physics Simulation vs Sustainable Research)
         self.mode_frame = ctk.CTkFrame(self.header_frame, fg_color="#161b22", corner_radius=6)
